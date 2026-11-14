@@ -3,6 +3,8 @@
 打开公开招募，助手直接在游戏画面里告诉你**这次能不能出好干员、该选哪几个 tag**，
 点一下就帮你选好 tag 和时间。你只需要按确认。
 
+支持 **国服 · 国际服 · 日服 · 韩服**（日服/韩服为 beta）· 界面：中文 / English / 日本語 / 한국어
+
 ![游戏内效果](docs/in-game.png)
 
 ---
@@ -40,7 +42,9 @@
 - **设置 / 卸载？** 右下角任务栏托盘里的蓝色菱形图标 → 设置。卸载在设置最下方。
 - **想彻底关掉？** 托盘图标 →「完全退出」（下次开机才会再启动）。
 - **更新？** 下载新版 exe 双击即可，会自动替换旧版。干员数据会在每次游戏启动时自动更新。
-- **国际服 / English？** 自动识别；界面语言跟随系统，也可在设置里改。
+- **国际服 / 日服 / 韩服？** 自动识别；界面语言跟随系统，也可在设置里改。
+  日服/韩服第一次使用时会自动下载对应的文字识别模型（约 10 / 13MB，只下载一次，有校验）。目前是 **beta**：
+  如果某个 tag 没识别出来，可以在主窗口「手动选择 tag」里补上，也欢迎提 issue 附截图。
 
 ### 安全
 助手需要管理员权限（因为游戏本身以管理员运行，要自动点选必须同级），所以做了这些保护：
@@ -52,13 +56,34 @@
 
 ---
 
+## 日本のプレイヤーへ（β）
+
+1. **[Releases](../../releases/latest)** から **`ArknightsRecruitHelper.exe`** をダウンロード
+2. ダブルクリックして管理者権限を許可
+3. **「インストールしてはじめる」** を押す
+
+あとはゲームで公開求人を開き、空いている募集枠をタップするだけ。画面の横に「おすすめ」が表示され、
+クリックするとタグと時間を自動で設定します（確定はご自身で）。初回のみ日本語の文字認識モデル（約 10MB）を自動ダウンロードします。
+
+## 한국 플레이어 (베타)
+
+1. **[Releases](../../releases/latest)** 에서 **`ArknightsRecruitHelper.exe`** 다운로드
+2. 더블클릭 후 관리자 권한 허용
+3. **「설치하고 시작하기」** 클릭
+
+게임에서 공개모집을 열고 빈 모집 칸을 누르면 화면 옆에 「추천」이 나타납니다. 클릭하면 태그와 시간이 자동으로
+설정됩니다 (확인은 직접). 처음 한 번만 한국어 문자 인식 모델(약 13MB)을 자동으로 내려받습니다.
+
+---
+
 ## For English players
 
 1. Download **`ArknightsRecruitHelper.exe`** from **[Releases](../../releases/latest)**
 2. Double-click it and allow the admin prompt
 3. Press **Install & start**
 
-It then starts with Windows automatically. Open Recruitment in the game, tap an empty slot,
+Supports CN, Global, JP and KR servers (JP/KR in beta; their text-recognition models download once, ~10–13 MB,
+checksum-verified). It then starts with Windows automatically. Open Recruitment in the game, tap an empty slot,
 and an **Advice** row appears under the dialog. Click a suggestion and the tags and timer are set for you;
 you just press confirm. If Windows shows "Windows protected your PC", click **More info → Run anyway**.
 
@@ -79,8 +104,9 @@ python app.py --selftest # 自检：数据 + OCR
 |---|---|
 | `app.py` | 主程序：监视循环、主窗口、设置、托盘、安装向导、自动选择 |
 | `gamecard.py` | 游戏内叠加层：逐像素透明的「招募建议」卡片（下方横排/侧边竖排）和 tag 括号 |
+| `i18n.py` | 日本語 / 한국어 界面文字 |
 | `overlay.py` | 主窗口组件和备用侧边面板 |
-| `ocr_engine.py` | OCR + 公招界面几何（tag 位置、选中状态、时间箭头） |
+| `ocr_engine.py` | OCR（中英内置；日韩模型按需下载并校验）+ 公招界面几何（tag 位置、选中状态、时间箭头、补读漏掉的按钮） |
 | `winutil.py` | 游戏窗口、截图、点击、计划任务、快捷方式、安装路径 |
 | `recruit_core.py` | 干员数据下载/自动更新、tag 匹配、组合计算 |
 

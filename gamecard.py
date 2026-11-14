@@ -109,12 +109,34 @@ _FONT_DIR = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
 _font_cache: dict = {}
 
 
-def font(size: float, bold=False, latin=False) -> ImageFont.FreeTypeFont:
-    size = max(9, int(round(size)))
-    key = (size, bold, latin)
+class FontSpec(tuple):
+    """字号/粗细/是否拉丁字体。实际字体按要画的文字决定（韩文 → Malgun Gothic，假名 → Yu Gothic，其他 → 雅黑）"""
+    __slots__ = ()
+
+    def __new__(cls, size, bold=False, latin=False):
+        return super().__new__(cls, (max(9, int(round(size))), bold, latin))
+
+
+def font(size: float, bold=False, latin=False) -> FontSpec:
+    return FontSpec(size, bold, latin)
+
+
+HANGUL = "[" + chr(0xAC00) + "-" + chr(0xD7AF) + chr(0x1100) + "-" + chr(0x11FF) + chr(0x3130) + "-" + chr(0x318F) + "]"
+KANA = "[" + chr(0x3040) + "-" + chr(0x30FF) + "]"
+
+
+def _real_font(spec: FontSpec, text: str) -> ImageFont.FreeTypeFont:
+    import re
+    size, bold, latin = spec
+    script = "ko" if re.search(HANGUL, text or "") else "ja" if re.search(KANA, text or "") else "zh"
+    key = (size, bold, latin, script)
     if key not in _font_cache:
-        names = (["bahnschrift.ttf"] if latin else []) + (["msyhbd.ttc", "msyh.ttc"] if bold else ["msyh.ttc"]) \
-            + ["segoeuib.ttf" if bold else "segoeui.ttf", "arial.ttf"]
+        by_script = {
+            "ko": ["malgunbd.ttf", "malgun.ttf"] if bold else ["malgun.ttf"],
+            "ja": ["YuGothB.ttc", "meiryob.ttc", "YuGothM.ttc"] if bold else ["YuGothM.ttc", "meiryo.ttc"],
+            "zh": ["msyhbd.ttc", "msyh.ttc"] if bold else ["msyh.ttc"],
+        }[script]
+        names = (["bahnschrift.ttf"] if latin and script == "zh" else []) + by_script             + ["segoeuib.ttf" if bold else "segoeui.ttf", "arial.ttf"]
         for n in names:
             try:
                 _font_cache[key] = ImageFont.truetype(os.path.join(_FONT_DIR, n), size)
@@ -126,8 +148,12 @@ def font(size: float, bold=False, latin=False) -> ImageFont.FreeTypeFont:
     return _font_cache[key]
 
 
+def draw_text(d: ImageDraw.ImageDraw, xy, text, font=None, **kw):
+    d.text(xy, text, font=_real_font(font, text), **kw)
+
+
 def text_w(d: ImageDraw.ImageDraw, s: str, f) -> float:
-    return d.textlength(s, font=f)
+    return d.textlength(s, font=_real_font(f, s))
 
 
 # ------------------------------------------------------------------ 配色（取自游戏公招框）
@@ -159,11 +185,11 @@ def star(d: ImageDraw.ImageDraw, cx, cy, r, fill):
 def rarity_badge(d, x, y, w, h, n, p, fg):
     """徽章里的“4★”：数字 + 画出来的星"""
     fnum = font(0.27 * p, True, latin=True)
-    tw = d.textlength(str(n), font=fnum)
+    tw = d.textlength(str(n), font=_real_font(fnum, str(n)))
     r = 0.1 * p
     total = tw + 0.04 * p + 2 * r
     sx = x + (w - total) / 2
-    d.text((sx, y + h / 2), str(n), font=fnum, fill=fg, anchor="lm")
+    draw_text(d, (sx, y + h / 2), str(n), font=fnum, fill=fg, anchor="lm")
     star(d, sx + tw + 0.04 * p + r, y + h / 2 - 0.01 * p, r, fg)
 
 
@@ -181,10 +207,21 @@ def _shadowed_card(img: Image.Image, box, p):
 
 def _wrap(d, words, sep, f, maxw):
     """把 tag 列表按宽度折行：['远程位 +', '费用回复']"""
-    lines, cur = [], ""
+    # 单个词比一行还宽（如「고급 특별 채용」）：先按空格拆，再不行按字拆
+    units = []
     for i, wd in enumerate(words):
-        piece = wd + (sep if i < len(words) - 1 else "")
-        if cur and text_w(d, cur + piece, f) > maxw:
+        last = i == len(words) - 1
+        if text_w(d, wd + ("" if last else sep), f) <= maxw:
+            units.append(wd + ("" if last else sep))
+            continue
+        parts = wd.split(" ") if " " in wd.strip() else list(wd)
+        joiner = " " if " " in wd.strip() else ""
+        for j, part in enumerate(parts):
+            tail = (joiner if j < len(parts) - 1 else ("" if last else sep))
+            units.append(part + tail)
+    lines, cur = [], ""
+    for piece in units:
+        if cur and text_w(d, cur + piece.rstrip(), f) > maxw:
             lines.append(cur.rstrip())
             cur = piece.lstrip()
         else:
@@ -309,7 +346,7 @@ class GameCard:
         # 关闭 ✕
         fx = font(0.24 * p)
         cx, cy = W - 0.22 * p, 0.2 * p
-        d.text((cx, cy), "×", font=fx, fill=(90, 90, 92, 255), anchor="mm")
+        draw_text(d, (cx, cy), "×", font=fx, fill=(90, 90, 92, 255), anchor="mm")
         self.hits.append(((cx - 0.2 * p, 0, W, 0.4 * p), "close", None))
         if orient == "v":
             self._paint_v(img, d, model, p, W, H, admin_ok, busy)
@@ -333,7 +370,7 @@ class GameCard:
         rarity_badge(d, x, y, bdw, bh, c["min"], p, fg + (255,))
         ty = y + bh / 2 - (len(lines) - 1) * line_h / 2
         for i, ln in enumerate(lines):
-            d.text((x + bdw + 0.18 * p, ty + i * line_h), ln, font=f, fill=(255, 255, 255, 255), anchor="lm")
+            draw_text(d, (x + bdw + 0.18 * p, ty + i * line_h), ln, font=f, fill=(255, 255, 255, 255), anchor="lm")
         self.hits.append(((x, y, x + bw, y + bh), "combo", c))
         return bh
 
@@ -352,13 +389,13 @@ class GameCard:
             reserve = more_w if (last_line and i < len(ops) - 1) else 0
             if cx + pw + reserve > x + maxw and cx > x:
                 if last_line:
-                    d.text((cx + 0.08 * p, y + line * lh), self.tx["ops_more"].format(n=len(ops) - i),
+                    draw_text(d, (cx + 0.08 * p, y + line * lh), self.tx["ops_more"].format(n=len(ops) - i),
                            font=f, fill=SUB, anchor="la")
                     break
                 line, cx = line + 1, x
                 piece, pw = name, text_w(d, name, f)
             color = OP_COLOR.get(r, SUB)
-            d.text((cx, y + line * lh), piece, font=f, fill=color, anchor="la")
+            draw_text(d, (cx, y + line * lh), piece, font=f, fill=color, anchor="la")
             cx += pw
         return (line + 1) * lh
 
@@ -378,7 +415,7 @@ class GameCard:
             d.polygon([(cx + 0.1 * p, y + h / 2 - t / 2), (cx + 0.1 * p + 2 * t, y + h / 2 - t / 2),
                        (cx + 0.1 * p + t, y + h / 2 + t)], fill=BTN_HOVER)
             label = self.tx["more_combos"].format(n=more)
-            d.text((cx + 0.4 * p, y + h / 2), label, font=f, fill=BTN_HOVER, anchor="lm")
+            draw_text(d, (cx + 0.4 * p, y + h / 2), label, font=f, fill=BTN_HOVER, anchor="lm")
             self.hits.append(((cx, y, cx + 0.5 * p + text_w(d, label, f), y + h), "next", None))
 
     def _paint_h(self, img, d, model, p, W, H, admin_ok, busy):
@@ -386,22 +423,22 @@ class GameCard:
         _shadowed_card(img, (x0, y0, x1, y1), p)
         cy = (y0 + y1) / 2
         lx = x0 + 0.5 * p
-        d.text((lx, cy - 0.2 * p), self.tx["card_label"], font=font(0.31 * p, True), fill=LABEL, anchor="lm")
+        draw_text(d, (lx, cy - 0.2 * p), self.tx["card_label"], font=font(0.31 * p, True), fill=LABEL, anchor="lm")
         sub, col = self._header_texts(model, busy)
-        d.text((lx, cy + 0.24 * p), sub, font=font(0.24 * p, True), fill=col + (255,), anchor="lm")
+        draw_text(d, (lx, cy + 0.24 * p), sub, font=font(0.24 * p, True), fill=col + (255,), anchor="lm")
         if not admin_ok and not busy:  # 右侧预留位置给提示，避免和按钮重叠
             fa = font(0.2 * p)
             lines = _wrap(d, list(self.tx["need_admin_short"].lstrip("⚠ ")), "", fa, 2.6 * p)
             tw = max(text_w(d, ln, fa) for ln in lines)
             ty = cy - (len(lines) - 1) * 0.14 * p
             for i, ln in enumerate(lines):
-                d.text((x1 - 0.2 * p, ty + i * 0.28 * p), ln, font=fa, fill=WARN, anchor="rm")
+                draw_text(d, (x1 - 0.2 * p, ty + i * 0.28 * p), ln, font=fa, fill=WARN, anchor="rm")
             self.hits.append(((x1 - 0.2 * p - tw, y0, x1, y1), "admin", None))
             x1 = x1 - tw - 0.45 * p
         combos = (model or {}).get("combos", [])
         bx = x0 + 3.0 * p
         if not combos:
-            d.text((bx, cy), (model or {}).get("subtitle", ""), font=font(0.27 * p), fill=LABEL, anchor="lm")
+            draw_text(d, (bx, cy), (model or {}).get("subtitle", ""), font=font(0.27 * p), fill=LABEL, anchor="lm")
             return
         f = font(0.28 * p, True)
         show_ops = H > 1.55 * p
@@ -427,12 +464,12 @@ class GameCard:
         x0, y0, x1, y1 = 0.16 * p, 0.42 * p, W - 0.16 * p, H - 0.16 * p
         _shadowed_card(img, (x0, y0, x1, y1), p)
         lx = x0 + 0.28 * p
-        d.text((lx, y0 + 0.42 * p), self.tx["card_label"], font=font(0.31 * p, True), fill=LABEL, anchor="lm")
+        draw_text(d, (lx, y0 + 0.42 * p), self.tx["card_label"], font=font(0.31 * p, True), fill=LABEL, anchor="lm")
         sub, col = self._header_texts(model, busy)
         y = y0 + 0.82 * p
         fs = font(0.24 * p, True)
         for ln in _wrap(d, list(sub), "", fs, x1 - lx - 0.2 * p) or [""]:
-            d.text((lx, y), ln, font=fs, fill=col + (255,), anchor="lm")
+            draw_text(d, (lx, y), ln, font=fs, fill=col + (255,), anchor="lm")
             y += 0.32 * p
         y += 0.12 * p
         d.line([lx, y, x1 - 0.28 * p, y], fill=(210, 210, 208, 255), width=max(1, int(p / 40)))
@@ -443,14 +480,14 @@ class GameCard:
             lines = _wrap(d, list(self.tx["need_admin_short"].lstrip("⚠ ")), "", fa, x1 - lx - 0.2 * p)
             ay = y1 - 0.15 * p - len(lines) * 0.27 * p
             for i, ln in enumerate(lines):
-                d.text((lx, ay + i * 0.27 * p), ln, font=fa, fill=WARN, anchor="la")
+                draw_text(d, (lx, ay + i * 0.27 * p), ln, font=fa, fill=WARN, anchor="la")
             self.hits.append(((x0, ay, x1, y1), "admin", None))
             bottom = ay - 0.15 * p
         combos = (model or {}).get("combos", [])
         if not combos:
             fsub = font(0.25 * p)
             for ln in _wrap(d, list((model or {}).get("subtitle", "")), "", fsub, x1 - lx - 0.2 * p):
-                d.text((lx, y), ln, font=fsub, fill=LABEL, anchor="la")
+                draw_text(d, (lx, y), ln, font=fsub, fill=LABEL, anchor="la")
                 y += 0.34 * p
             return
         bw = x1 - lx - 0.28 * p
@@ -461,12 +498,19 @@ class GameCard:
         self.shown = 0
         for i, c in enumerate(page):
             tags = list(c["tags"]) + (["3:50"] if c["min"] == 1 else [])
-            lines = _wrap(d, tags, " + ", f, bw - 0.56 * p - 0.3 * p)
+            avail = bw - 0.56 * p - 0.3 * p
+            fb = f  # 最长的 tag 放不下时先把字缩小一点（最多到 82%），实在不行才拆词
+            widest = max(tags, key=lambda t: text_w(d, t + " +", f))
+            for k in (0.94, 0.88, 0.82):
+                if text_w(d, widest + " +", fb) <= avail:
+                    break
+                fb = font(0.27 * p * k, True)
+            lines = _wrap(d, tags, " + ", fb, avail)
             need = max(0.62 * p, len(lines) * line_h + 0.24 * p) + 0.66 * p
             reserve = pager_h if i < len(page) - 1 or self.pages else 0
             if y + need + reserve > bottom and i:
                 break
-            bh = self._button(img, d, c, lx, y, bw, lines, p, f, line_h)
+            bh = self._button(img, d, c, lx, y, bw, lines, p, fb, line_h)
             y += bh + 0.06 * p
             y += self._ops_line(d, c, lx + 2, y, bw, p, max_lines=2) + 0.16 * p
             self.shown += 1

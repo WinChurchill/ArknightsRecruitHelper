@@ -34,6 +34,8 @@ _seed_data()
 SOURCES = {
     "cn": "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata/excel/",
     "en": "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/main/en_US/gamedata/excel/",
+    "jp": "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/main/ja_JP/gamedata/excel/",
+    "kr": "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/main/ko_KR/gamedata/excel/",
 }
 MIRRORS = [  # 国内网络 raw.githubusercontent 不通时的备用
     "",
@@ -86,6 +88,12 @@ def build_pool(gacha: dict, chars: dict) -> dict:
     for name, stars in pool_names.items():
         cands = by_name.get(name, [])
         c = next((x for x in cands if _rarity(x["rarity"]) == stars), cands[0] if cands else None)
+        if c is None:
+            # 游戏数据偶有拼写不一致（如韩服 샤미르 / 샤마르）：在同星级里找最相近的名字
+            same = {n: lst for n, lst in by_name.items() if any(_rarity(x["rarity"]) == stars for x in lst)}
+            close = difflib.get_close_matches(name, list(same), n=1, cutoff=0.6)
+            if close:
+                c = next(x for x in same[close[0]] if _rarity(x["rarity"]) == stars)
         if c is None:
             print(f"[warn] 找不到干员 {name}")
             continue
@@ -209,11 +217,19 @@ class Pool:
             return None, 0.0
         if n in self._norm:
             return self._norm[n], 1.0
-        is_cjk = bool(re.search(r"[一-鿿]", n))
+        is_cjk = bool(re.search("[" + chr(0x3040) + "-" + chr(0x30FF) + chr(0x4E00) + "-" + chr(0x9FFF) + chr(0xAC00) + "-" + chr(0xD7AF) + "]", n))  # 汉字/假名/韩文
         if is_cjk and len(n) < 2:
             return None, 0.0
         if not is_cjk and len(n) < 3:
             return None, 0.0
+        if _has_hangul(n):  # 韩文：按字母（자모）比较，一个辅音认错（메릭/메딕）也能对上
+            jn = _jamo(n)
+            scored = [(difflib.SequenceMatcher(None, jn, _jamo(c)).ratio(), c) for c in self._norm if _has_hangul(c)]
+            if scored:
+                ratio, cand = max(scored)
+                if ratio >= 0.75 and abs(len(n) - len(cand)) <= max(1, len(cand) // 4):
+                    return self._norm[cand], ratio
+                return None, ratio
         best = difflib.get_close_matches(n, list(self._norm), n=1, cutoff=0.0)
         if not best:
             return None, 0.0
@@ -223,6 +239,24 @@ class Pool:
         if ratio >= cutoff and abs(len(n) - len(best[0])) <= max(1, len(best[0]) // 4):
             return self._norm[best[0]], ratio
         return None, ratio
+
+
+def _has_hangul(s: str) -> bool:
+    return any(0xAC00 <= ord(ch) <= 0xD7A3 for ch in s)
+
+
+def _jamo(s: str) -> str:
+    """把韩文音节拆成字母：메딕 → ㅁㅔㄷㅣㄱ（用 Unicode 组合字母表示）"""
+    out = []
+    for ch in s:
+        code = ord(ch) - 0xAC00
+        if 0 <= code < 11172:
+            out.append(chr(0x1100 + code // 588) + chr(0x1161 + (code % 588) // 28))
+            if code % 28:
+                out.append(chr(0x11A7 + code % 28))
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def _norm(s: str) -> str:

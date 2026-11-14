@@ -1,10 +1,73 @@
 """OCR + 公招界面几何（tag 按钮位置、选中状态、时间箭头）。坐标均为截图内坐标。"""
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import urllib.request
 from dataclasses import dataclass, field
 
 import recruit_core as rc
+
+# ---- OCR 识别模型：中/英用内置模型；日/韩模型按需下载（约 10/13MB），用固定的 SHA-256 校验 ----
+SERVER_LANG = {"cn": "zh", "en": "zh", "jp": "ja", "kr": "ko"}
+LANG_SERVERS = {"zh": ("cn", "en"), "ja": ("jp",), "ko": ("kr",)}
+MODEL_DIR = os.path.join(rc.USER_DIR, "models")
+MODEL_BASE = "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/master/"
+MODELS = {
+    "ja": {
+        "rec": ("onnx/PP-OCRv4/rec/japan_PP-OCRv4_rec_mobile.onnx", 9753335,
+                "e1075a67dba758ecfc7ebc78a10ae61c95ac8fb66a9c86fab5541e33f085cb7a"),
+        "keys": ("paddle/PP-OCRv4/rec/japan_PP-OCRv4_rec_mobile/japan_dict.txt", 17332,
+                 "1dcfcb41eec90576a945b3084f22ade11ced506e24f14879245b071698f308e8"),
+    },
+    "ko": {
+        "rec": ("onnx/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile.onnx", 13488748,
+                "cd6e2ea50f6943ca7271eb8c56a877a5a90720b7047fe9c41a2e541a25773c9b"),
+        "keys": ("paddle/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile/ppocrv5_korean_dict.txt", 47451,
+                 "a88071c68c01707489baa79ebe0405b7beb5cca229f4fc94cc3ef992328802d7"),
+    },
+}
+# 公招时间一定是 0X:X0:00（1~9 小时、10 分钟一档）——任何语言的模型都能读出数字，用来判断“这是公招界面”
+RECRUIT_TIME_RE = re.compile(r"(?<!\d)0?[1-9]\s*[:：]\s*[0-5]0\s*[:：]\s*00(?!\d)")
+
+
+def _model_path(lang, kind):
+    return os.path.join(MODEL_DIR, os.path.basename(MODELS[lang][kind][0]))
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def model_ready(lang) -> bool:
+    if lang == "zh":
+        return True
+    return all(os.path.isfile(_model_path(lang, k)) and os.path.getsize(_model_path(lang, k)) == MODELS[lang][k][1]
+               for k in MODELS[lang])
+
+
+def download_model(lang, log=print):
+    """下载并校验日/韩识别模型；校验不通过的文件不会被保存"""
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    for kind, (path, size, sha) in MODELS[lang].items():
+        dst = _model_path(lang, kind)
+        if os.path.isfile(dst) and _sha256(dst) == sha:
+            continue
+        log(f"OCR model {lang}: {os.path.basename(path)} ({size // 1024} KB)")
+        req = urllib.request.Request(MODEL_BASE + path, headers={"User-Agent": "ark-recruit-helper"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            data = r.read(size + 1)
+        if len(data) != size or hashlib.sha256(data).hexdigest() != sha:
+            raise ValueError(f"model checksum mismatch: {os.path.basename(path)}")
+        tmp = dst + ".part"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dst)
 
 # 以“tag 行距 p”为单位的界面比例（实测于官方 PC 端）
 BTN_HALF_W = 1.0      # tag 按钮半宽
@@ -23,6 +86,7 @@ class Scan:
     selected: set = field(default_factory=set)        # 游戏里已选中的 tagId
     time: tuple | None = None                         # (时, 分)
     cols: list = field(default_factory=list)          # 三列中心 x
+    looks_recruit: bool = False                       # 看到了公招时间（即使 tag 语言不对）
     row1: float = 0.0                                  # 第一行中心 y
 
     @property
@@ -57,15 +121,30 @@ class Scan:
 
 class OCR:
     def __init__(self):
-        from rapidocr_onnxruntime import RapidOCR
-        # 4 线程：速度和用满全部核心一样，CPU 占用减半
-        self.engine = RapidOCR(intra_op_num_threads=4, inter_op_num_threads=1)
+        self.engines = {}
+        self.engine_for("zh")
 
-    def read_boxes(self, img, scale=1):
+    def engine_for(self, lang):
+        if lang not in self.engines:
+            from rapidocr_onnxruntime import RapidOCR
+            # 4 线程：速度和用满全部核心一样，CPU 占用减半
+            kw = dict(intra_op_num_threads=4, inter_op_num_threads=1)
+            if lang != "zh":
+                for kind, (_, _, sha) in MODELS[lang].items():  # 每次加载前重新校验，防止文件被替换
+                    if _sha256(_model_path(lang, kind)) != sha:
+                        raise ValueError(f"{lang} model file changed or corrupt")
+                kw.update(rec_model_path=_model_path(lang, "rec"), rec_keys_path=_model_path(lang, "keys"))
+            self.engines[lang] = RapidOCR(**kw)
+        return self.engines[lang]
+
+    def available(self, lang):
+        return lang in self.engines or model_ready(lang)
+
+    def read_boxes(self, img, scale=1, lang="zh"):
         import cv2
         if scale != 1:
             img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        result, _ = self.engine(img)
+        result, _ = self.engine_for(lang)(img)
         out = []
         for box, text, _score in result or []:
             xs = [p[0] / scale for p in box]
@@ -73,30 +152,36 @@ class OCR:
             out.append((text, (min(xs), min(ys), max(xs), max(ys))))
         return out
 
-    def scan(self, img, pools: dict) -> Scan:
+    def _fill_slots(self, img, s, pool, lang, rects):
+        _fill_slots_impl(self, img, s, pool, lang, rects)
+
+    def scan(self, img, pools: dict, lang="zh") -> Scan:
         h, w = img.shape[:2]
         small = h * w < 1_500_000
-        boxes = self.read_boxes(img, 2 if small else 1)
+        boxes = self.read_boxes(img, 2 if small else 1, lang)
         srv, tags = rc.detect_tags([t for t, _ in boxes], pools)
         pool = pools[srv]
         rects = _rects(boxes, pool, 0, 0)
-        if 0 < len(tags) < 5 and not small:  # 第二遍：放大 tag 附近区域补漏
+        if 0 < len(tags) < 5:  # 第二遍：换一个放大倍数重读 tag 附近区域补漏（两遍漏掉的字往往不同）
             xs = [v for r in rects.values() for v in (r[0], r[2])]
             ys = [v for r in rects.values() for v in (r[1], r[3])]
             mx, my = max(150, (max(xs) - min(xs)) * 0.6), max(80, (max(ys) - min(ys)) * 1.2)
             x0, x1 = int(max(0, min(xs) - mx)), int(min(w, max(xs) + mx))
             y0, y1 = int(max(0, min(ys) - my)), int(min(h, max(ys) + my))
-            more = self.read_boxes(img[y0:y1, x0:x1].copy(), 2)
+            more = self.read_boxes(img[y0:y1, x0:x1].copy(), 3 if small else 2, lang)
             _, tags2 = rc.detect_tags([t for t, _ in more], {srv: pool})
             tags += [t for t in tags2 if t not in tags]
             for k, r in _rects(more, pool, x0, y0).items():
                 rects.setdefault(k, r)
             boxes += [(t, (a + x0, b + y0, c + x0, d + y0)) for t, (a, b, c, d) in more]
         s = Scan(srv=srv, tags=tags)
+        s.looks_recruit = any(RECRUIT_TIME_RE.search(t) for t, _ in boxes)
         if not rects:
             return s
         s.centers = {k: ((r[0] + r[2]) / 2, (r[1] + r[3]) / 2) for k, r in rects.items()}
         _geometry(s, rects)
+        if 3 <= len(s.tags) < 5:
+            self._fill_slots(img, s, pool, lang, rects)
         s.selected = {k for k, (cx, cy) in s.centers.items() if _is_selected(img, cx, cy, s.pitch)}
         s.time = _parse_time(boxes, s)
         return s
@@ -119,6 +204,43 @@ def _cluster(vals, tol):
         else:
             groups.append([v])
     return [sum(g) / len(g) for g in groups]
+
+
+COL_STEP = 2.33  # 相邻两列 tag 按钮的间距（单位：行距 p）
+
+
+def _fill_slots_impl(ocr, img, s: Scan, pool, lang, rects):
+    """公招永远是 5 个按钮、位置固定。找到 3~4 个时，直接读缺的那个按钮（只做文字识别，不做文字定位），
+    并只在“还没找到的 tag”里匹配。韩文短词（제어형/딜러/힐링）常被定位步骤漏掉，单独读按钮则能读对。"""
+    import cv2
+    p = s.pitch
+    xs = [c[0] for c in s.centers.values()]
+    ys = [c[1] for c in s.centers.values()]
+    base_x, row1 = min(xs), min(ys)
+    slots = [(base_x + i * COL_STEP * p, row1) for i in range(3)] + [(base_x + i * COL_STEP * p, row1 + p) for i in range(2)]
+    h, w = img.shape[:2]
+    for sx, sy in slots:
+        if any(abs(cx - sx) < 0.6 * p and abs(cy - sy) < 0.4 * p for cx, cy in s.centers.values()):
+            continue
+        x0, x1 = int(sx - 0.95 * p), int(sx + 0.95 * p)
+        y0, y1 = int(sy - 0.30 * p), int(sy + 0.30 * p)
+        if x0 < 0 or y0 < 0 or x1 > w or y1 > h:
+            continue
+        crop = img[y0:y1, x0:x1]
+        if crop.std() < 8:  # 空按钮（没有字）
+            continue
+        if crop.shape[0] < 40:
+            crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        res, _ = ocr.engine_for(lang)(crop.copy(), use_det=False, use_cls=False)
+        text = res[0][0] if res else ""
+        tid, _ = pool.match_text(text)
+        if tid is None or tid in s.tags:
+            continue
+        s.tags.append(tid)
+        s.centers[tid] = (sx, sy)
+        rects[tid] = (x0, y0, x1, y1)
+        if len(s.tags) >= 5:
+            break
 
 
 def _geometry(s: Scan, rects):

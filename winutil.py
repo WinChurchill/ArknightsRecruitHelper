@@ -162,11 +162,19 @@ def is_installed_copy() -> bool:
 
 
 def ui_lang() -> str:
-    """Windows 显示语言是中文 → zh，否则 en"""
+    """按 Windows 显示语言选择界面语言：中文/日语/韩语，其他用英语"""
     try:
-        return "zh" if (ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF) == 0x04 else "en"
+        primary = ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF
+        return {0x04: "zh", 0x11: "ja", 0x12: "ko"}.get(primary, "en")
     except Exception:  # noqa: BLE001
         return "zh"
+
+
+def window_title(hwnd) -> str:
+    n = u32.GetWindowTextLengthW(hwnd)
+    buf = ctypes.create_unicode_buffer(n + 1)
+    u32.GetWindowTextW(hwnd, buf, n + 1)
+    return buf.value.strip()
 
 
 def start_menu_dir() -> str:

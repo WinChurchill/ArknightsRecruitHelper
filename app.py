@@ -25,6 +25,7 @@ import winutil as w
 w.set_dpi_aware()  # 必须在 Tk 之前
 
 import recruit_core as rc  # noqa: E402
+import ocr_engine as oe  # noqa: E402
 from ocr_engine import OCR, Scan  # noqa: E402
 from gamecard import BracketLayer, GameCard  # noqa: E402
 from overlay import (ACCENT, BG, CHIP, CN, EN, LINE, PANEL, ROW, STAR, SUB, TXT, WARN,  # noqa: E402
@@ -38,7 +39,7 @@ ASSETS = os.path.join(HERE, "assets")
 SCRIPTS_DIR = os.path.join(w.INSTALL_DIR, "assets") if w.FROZEN else ASSETS
 PAUSED_FLAG = os.path.join(HERE, "paused.flag")  # “完全退出”标记：看门狗不再拉起，直到下次登录
 LOG_PATH = os.path.join(HERE, "log.txt")
-VERSION = "1.0.2"
+VERSION = "1.1.0"
 PORT = 47391
 HOTKEY_SCAN, HOTKEY_OVERLAY = "f8", "f9"
 TICK_MS = 400
@@ -151,6 +152,14 @@ TEXT = {
         "u_btn": "Uninstall", "u_confirm": "Uninstall Recruit Helper?\nThis removes the program, its settings and all shortcuts.",
     },
 }
+
+
+import i18n  # noqa: E402
+
+i18n.install(TEXT)
+LANG_OPTIONS = [("zh", "中文"), ("en", "English"), ("ja", "日本語"), ("ko", "한국어")]
+SERVERS = ("cn", "en", "jp", "kr")
+TITLE_LANG = {"明日方舟": "zh", "Arknights": "zh", "アークナイツ": "ja", "명일방주": "ko"}
 
 
 def load_config() -> dict:
@@ -356,6 +365,8 @@ class App:
         self.miss_streak = 0
         self.next_ocr_at = 0.0
         self.sleeping = False      # 用户关闭：休眠到下一次游戏启动
+        self.title_lang = None     # 游戏窗口标题提示的语言
+        self.model_dl = set()      # 正在下载的日/韩模型
         self.sleep_hwnd = None
         self.hover = None
         self.panel_closed_sig = None
@@ -405,7 +416,7 @@ class App:
     # ------------------------------------------------------------ data
     def load_pools(self):
         self.pools = {}
-        for srv in ("cn", "en"):
+        for srv in SERVERS:
             try:
                 self.pools[srv] = rc.Pool(srv)
             except FileNotFoundError:
@@ -413,11 +424,42 @@ class App:
         if not self.pools:
             self.update_data(force=True)
 
-    def pools_for_scan(self):
+    def pools_for_scan(self, lang="zh"):
+        """某个识别模型对应的服务器数据（中文模型 → 国服+国际服；日文 → 日服；韩文 → 韩服）"""
         mode = self.cfg.get("server", "auto")
         if mode in self.pools:
             return {mode: self.pools[mode]}
-        return self.pools
+        return {k: v for k, v in self.pools.items() if k in oe.LANG_SERVERS[lang]}
+
+    def ocr_langs(self):
+        """本次识别要尝试的模型顺序：设置指定 > 窗口标题提示 > 上次成功的 > 其他"""
+        mode = self.cfg.get("server", "auto")
+        if mode in oe.SERVER_LANG:
+            return [oe.SERVER_LANG[mode]]
+        first = self.title_lang or self.cfg.get("last_ocr_lang", "zh")
+        return [first] + [x for x in ("zh", "ja", "ko") if x != first]
+
+    def ensure_model(self, lang):
+        """后台下载日/韩识别模型（只下载一次，校验 SHA-256）"""
+        if lang == "zh" or oe.model_ready(lang) or lang in self.model_dl:
+            return
+        self.model_dl.add(lang)
+        name = self.t("lang_" + lang)
+        mb = round(sum(v[1] for v in oe.MODELS[lang].values()) / 1e6)
+        self.status(self.t("dl_model", lang=name, mb=mb))
+
+        def work():
+            try:
+                oe.download_model(lang, log=lambda m: log.info(m))
+                log.info("model ready: %s", lang)
+                self.status(self.t("dl_done", lang=name))
+                self.ocr_thumb = None  # 立即重新识别
+            except Exception as e:  # noqa: BLE001
+                log.warning("model download failed: %s %s", lang, e)
+                self.status(self.t("dl_fail", lang=name, e=e))
+            finally:
+                self.model_dl.discard(lang)
+        threading.Thread(target=work, daemon=True).start()
 
     def update_data(self, force=True, silent=False):
         if getattr(self, "_updating", False):
@@ -467,6 +509,11 @@ class App:
         r = w.client_rect(self.hwnd)
         log.info("game started: %s %s", w.process_name(self.hwnd) or "?", r[2:] if r else "?")
         self.game_elevated = bool(w.process_is_elevated(self.hwnd))
+        self.title_lang = TITLE_LANG.get(w.window_title(self.hwnd))
+        if self.cfg.get("server", "auto") in ("jp", "kr"):
+            self.ensure_model(oe.SERVER_LANG[self.cfg["server"]])
+        elif self.title_lang in ("ja", "ko"):
+            self.ensure_model(self.title_lang)  # 日服/韩服客户端：提前下载对应模型
         self.load_ocr()
         self._update_on_game_start()
         self._refresh_status()
@@ -590,7 +637,22 @@ class App:
         def work():
             try:
                 t0 = time.time()
-                s = self.ocr.scan(img, self.pools_for_scan())
+                s = None
+                for i, lang in enumerate(self.ocr_langs()):
+                    if not self.ocr.available(lang):
+                        if s is not None and s.looks_recruit and not s.tags:
+                            self.root.after(0, lambda la=lang: self.ensure_model(la))  # 公招界面但读不出 tag
+                        continue
+                    r = self.ocr.scan(img, self.pools_for_scan(lang), lang)
+                    if s is None or r.ok:
+                        s = r
+                    if r.ok:
+                        if self.cfg.get("last_ocr_lang") != lang:
+                            self.cfg["last_ocr_lang"] = lang
+                            save_config(self.cfg)
+                        break
+                    if not r.looks_recruit:
+                        break  # 不是公招界面：不用再试其他语言（省 CPU）
                 dt = time.time() - t0
                 self.root.after(0, lambda: (cb or self.on_scan)(s, area, dt))
             except Exception as e:  # noqa: BLE001
@@ -631,7 +693,7 @@ class App:
         if new_tags:
             self.panel_closed_sig = None
             self.hover = None
-            name = self.t("srv_cn") if s.srv == "cn" else self.t("srv_en")
+            name = self.t("srv_" + s.srv)
             self.status_msg = self.t("found", n=len(s.tags), srv=name, t=dt)
         self.refresh_all()
 
@@ -847,7 +909,7 @@ class App:
                         w.click_sequence(self.hwnd, pts, bounds=area)
                     time.sleep(0.45)
                     img, _ = w.grab(area)
-                    sc = self.ocr.scan(img, {s.srv: self.pools[s.srv]})
+                    sc = self.ocr.scan(img, {s.srv: self.pools[s.srv]}, oe.SERVER_LANG[s.srv])
                     if done_ok(sc):
                         ok = True
                         break
@@ -1084,9 +1146,9 @@ class App:
 
     def _settings_body(self, b):
         self._section(b, self.t("s_lang"))
-        self._seg(b, [("zh", "中文"), ("en", "English")], self.lang, self.set_lang)
+        self._seg(b, LANG_OPTIONS, self.lang, self.set_lang)
         self._section(b, self.t("s_server"))
-        self._seg(b, [("auto", self.t("s_auto")), ("cn", self.t("srv_cn")), ("en", self.t("srv_en"))],
+        self._seg(b, [("auto", self.t("s_auto"))] + [(k, self.t("srv_" + k)) for k in SERVERS],
                   self.cfg.get("server", "auto"), lambda v: (self.setcfg(server=v), self.refresh_all()))
         self._section(b, self.t("s_display"))
         self._check(b, self.t("s_overlay"), "overlay", True, lambda: (self.update_overlay(), self._sync_tray()))
@@ -1137,8 +1199,8 @@ class App:
         self._section(b, self.t("s_data"))
         meta = rc._load_meta()
         when = time.strftime("%m-%d %H:%M", time.localtime(meta["checked"])) if meta.get("checked") else "-"
-        tk.Label(b, text=self.t("data_info", cn=len(self.pools.get("cn").ops) if "cn" in self.pools else 0,
-                                en=len(self.pools.get("en").ops) if "en" in self.pools else 0, t=when),
+        counts = {k: len(self.pools[k].ops) if k in self.pools else 0 for k in SERVERS}
+        tk.Label(b, text=self.t("data_info", cn=counts["cn"], en=counts["en"], jp=counts["jp"], kr=counts["kr"], t=when),
                  bg=BG, fg=SUB, font=(CN, px(10)), anchor="w").pack(fill="x")
         row = tk.Frame(b, bg=BG)
         row.pack(fill="x", pady=(4, 0))
@@ -1371,7 +1433,7 @@ def run_wizard(root: tk.Tk, cfg: dict, installer: bool) -> bool:
         def label(text):
             tk.Label(opt, text=text, bg=BG, fg=SUB, font=(CN, px(11), "bold"), anchor="w").pack(fill="x", pady=(6, 3))
         label(T["s_lang"])
-        seg([("zh", "中文"), ("en", "English")], "lang")
+        seg(LANG_OPTIONS, "lang")
         label(T["s_start"])
         var = tk.StringVar(value=st["startup"])
         for val in ("logon", "with_game", "manual"):
@@ -1426,6 +1488,9 @@ def selftest(out: str | None) -> int:
         from PIL import Image, ImageDraw, ImageFont
         import numpy as np
         pools = {s: rc.Pool(s) for s in ("cn", "en")}
+        extra = {s: rc.Pool(s) for s in ("jp", "kr")}
+        lines.append("jp/kr pools " + " ".join(f"{k}={len(v.ops)}" for k, v in extra.items()))
+        lines.append("i18n " + " ".join(f"{k}={len(v)}" for k, v in TEXT.items()))
         lines.append("pools " + " ".join(f"{k}={len(v.ops)}" for k, v in pools.items()))
         im = Image.new("RGB", (900, 300), (40, 40, 45))
         d = ImageDraw.Draw(im)

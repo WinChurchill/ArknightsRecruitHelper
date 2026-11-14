@@ -32,6 +32,7 @@ jobs:
           .venv-build\Scripts\python.exe -m PyInstaller --noconfirm --onefile --windowed --name ArkSelftest `
             --distpath build\st --workpath build\stw --specpath build `
             --add-data "$PWD\data\pool_cn.json;data" --add-data "$PWD\data\pool_en.json;data" `
+            --add-data "$PWD\data\pool_jp.json;data" --add-data "$PWD\data\pool_kr.json;data" `
             --collect-all rapidocr_onnxruntime --hidden-import pystray._win32 app.py
           $p = Start-Process build\st\ArkSelftest.exe -ArgumentList "--selftest","$PWD\selftest.txt" -PassThru -Wait
           Get-Content selftest.txt

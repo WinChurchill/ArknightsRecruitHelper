@@ -96,21 +96,52 @@ def is_admin() -> bool:
         return False
 
 
+FROZEN = getattr(sys, "frozen", False)
+APP_NAME = "ArknightsRecruitHelper"
+INSTALL_DIR = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", APP_NAME)
+INSTALLED_EXE = os.path.join(INSTALL_DIR, APP_NAME + ".exe")
+
+
 def pythonw() -> str:
     exe = sys.executable
     w = os.path.join(os.path.dirname(exe), "pythonw.exe")
     return w if os.path.exists(w) else exe
 
 
-def relaunch_as_admin(args: list[str], wait=False) -> bool:
+def app_cmd(exe: str | None = None) -> tuple[str, list[str], str]:
+    """启动本程序的 (可执行文件, 前置参数, 工作目录)。exe 版直接运行 exe；源码版用 pythonw app.py"""
+    if FROZEN:
+        e = exe or sys.executable
+        return e, [], os.path.dirname(e)
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
-    params = subprocess.list2cmdline([script] + args)
+    return pythonw(), [script], os.path.dirname(script)
+
+
+def relaunch_as_admin(args: list[str], wait=False) -> bool:
+    exe, pre, cwd = app_cmd()
+    params = subprocess.list2cmdline(pre + args)
     if not wait:
-        r = ctypes.windll.shell32.ShellExecuteW(None, "runas", pythonw(), params, None, 1)
+        r = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, cwd, 1)
         return r > 32
-    ps = (f"$p=Start-Process -FilePath '{pythonw()}' -ArgumentList '{params.replace(chr(39), chr(39) * 2)}' "
+    ps = (f"$p=Start-Process -FilePath '{exe}' -ArgumentList '{params.replace(chr(39), chr(39) * 2)}' "
           f"-Verb RunAs -Wait -PassThru; exit $p.ExitCode")
     return run_ps(ps) == 0
+
+
+def is_installed_copy() -> bool:
+    return not FROZEN or os.path.normcase(os.path.abspath(sys.executable)) == os.path.normcase(INSTALLED_EXE)
+
+
+def ui_lang() -> str:
+    """Windows 显示语言是中文 → zh，否则 en"""
+    try:
+        return "zh" if (ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF) == 0x04 else "en"
+    except Exception:  # noqa: BLE001
+        return "zh"
+
+
+def start_menu_dir() -> str:
+    return os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs")
 
 
 # ------------------------------------------------------------------ capture
@@ -188,9 +219,8 @@ def run_ps(script: str) -> int:
                            creationflags=CREATE_NO_WINDOW)
 
 
-def _task_xml(args: str, logon: bool) -> str:
-    here = os.path.dirname(os.path.abspath(__file__))
-    script = os.path.join(here, "app.py")
+def _task_xml(args: str, logon: bool, exe: str | None = None) -> str:
+    cmd, pre, here = app_cmd(exe)
     trig = "<Triggers><LogonTrigger><Enabled>true</Enabled><Delay>PT20S</Delay></LogonTrigger></Triggers>" if logon \
         else "<Triggers/>"
     esc = lambda s: s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")  # noqa: E731
@@ -207,22 +237,27 @@ def _task_xml(args: str, logon: bool) -> str:
     <Priority>6</Priority>
   </Settings>
   <Actions Context="Author"><Exec>
-    <Command>{esc(pythonw())}</Command>
-    <Arguments>{esc(subprocess.list2cmdline([script] + args.split()))}</Arguments>
+    <Command>{esc(cmd)}</Command>
+    <Arguments>{esc(subprocess.list2cmdline(pre + args.split()))}</Arguments>
     <WorkingDirectory>{esc(here)}</WorkingDirectory>
   </Exec></Actions>
 </Task>"""
 
 
-def create_task(name: str, args: str, logon: bool) -> bool:
+def create_task(name: str, args: str, logon: bool, exe: str | None = None) -> bool:
     import tempfile
     path = os.path.join(tempfile.gettempdir(), f"{TASK_PREFIX}{name}.xml")
     with open(path, "w", encoding="utf-16") as f:
-        f.write(_task_xml(args, logon))
+        f.write(_task_xml(args, logon, exe))
     r = subprocess.call(["schtasks", "/create", "/tn", TASK_PREFIX + name, "/xml", path, "/f"],
                         creationflags=CREATE_NO_WINDOW, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     os.remove(path)
     return r == 0
+
+
+def run_task(name: str) -> bool:
+    return subprocess.call(["schtasks", "/run", "/tn", TASK_PREFIX + name], creationflags=CREATE_NO_WINDOW,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
 
 
 def delete_task(name: str):

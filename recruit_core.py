@@ -6,10 +6,30 @@ import itertools
 import json
 import os
 import re
+import shutil
+import sys
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(HERE, "data")
+FROZEN = getattr(sys, "frozen", False)          # 打包成 exe 运行
+BUNDLE_DIR = getattr(sys, "_MEIPASS", HERE)       # exe 内置文件（初始干员数据）
+# 用户数据：exe 版放 %APPDATA%，源码版放在项目文件夹
+USER_DIR = os.path.join(os.environ.get("APPDATA", HERE), "ArknightsRecruitHelper") if FROZEN else HERE
+DATA_DIR = os.path.join(USER_DIR, "data")
+
+
+def _seed_data():
+    """首次运行：把 exe 内置的干员数据复制到用户目录（之后自动更新会覆盖它）"""
+    src = os.path.join(BUNDLE_DIR, "data")
+    if os.path.normcase(src) == os.path.normcase(DATA_DIR) or not os.path.isdir(src):
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    for name in os.listdir(src):
+        if name.startswith("pool_") and not os.path.exists(os.path.join(DATA_DIR, name)):
+            shutil.copy2(os.path.join(src, name), os.path.join(DATA_DIR, name))
+
+
+_seed_data()
 
 SOURCES = {
     "cn": "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata/excel/",

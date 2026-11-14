@@ -27,9 +27,11 @@ from ocr_engine import OCR, Scan  # noqa: E402
 from overlay import (ACCENT, BG, CHIP, CN, EN, LINE, PANEL, ROW, STAR, SUB, TXT, WARN,  # noqa: E402
                      GameCard, Marks, Panel, ResultView, px)
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = rc.USER_DIR  # 用户数据目录（exe 版在 %APPDATA%）
+os.makedirs(HERE, exist_ok=True)
 CONFIG_PATH = os.path.join(HERE, "config.json")
 ASSETS = os.path.join(HERE, "assets")
+VERSION = "1.0.0"
 PORT = 47391
 HOTKEY_SCAN, HOTKEY_OVERLAY = "f8", "f9"
 TICK_MS = 400
@@ -79,6 +81,12 @@ TEXT = {
         "w_shortcut": "在桌面创建「公招助手」快捷方式", "w_go": "开始使用",
         "w_admin": "完成时会请求一次管理员权限（用于自启动和自动点选，之后不再询问）。",
         "hotkeys": "F8 立即识别 · F9 显示/隐藏叠加层",
+        "w_steps": "①  在游戏里打开「公开招募」，点开一个空的招募位\n"
+                   "②  界面下方会出现「招募建议」，告诉你能不能出好干员\n"
+                   "③  点一下建议，助手自动帮你选好 tag 和时间，你只要点确认",
+        "w_install": "安装并开始使用", "w_start": "开始使用", "w_installing": "正在安装，请稍候…",
+        "w_more": "更多选项", "w_auto": "之后开机会自动在后台待命，什么都不用管。",
+        "u_btn": "卸载公招助手", "u_confirm": "确定要卸载公招助手吗？\n会删除程序、设置和所有快捷方式。",
     },
     "en": {
         "app": "Recruit Helper", "panel_title": "Recruitment",
@@ -120,6 +128,12 @@ TEXT = {
         "w_shortcut": "Create a desktop shortcut", "w_go": "Get started",
         "w_admin": "You'll be asked for admin once (for autostart and auto-select); never again after.",
         "hotkeys": "F8 scan now · F9 toggle overlay",
+        "w_steps": "1.  In the game, open Recruitment and tap an empty slot\n"
+                   "2.  An 'Advice' row appears under the dialog and tells you if a good operator is possible\n"
+                   "3.  Click the advice: tags and timer are set for you. Just press confirm",
+        "w_install": "Install & start", "w_start": "Get started", "w_installing": "Installing, please wait…",
+        "w_more": "More options", "w_auto": "It will quietly start with Windows from now on. Nothing else to do.",
+        "u_btn": "Uninstall", "u_confirm": "Uninstall Recruit Helper?\nThis removes the program, its settings and all shortcuts.",
     },
 }
 
@@ -166,19 +180,23 @@ def make_icon(size=64):
     return im
 
 
-def apply_startup(mode: str, shortcut: bool, cfg: dict) -> bool:
-    """创建/删除计划任务与快捷方式。需要管理员。"""
+def _lnk_names():
+    return [os.path.join(w.desktop_dir(), "公招助手.lnk"),
+            os.path.join(w.desktop_dir(), "明日方舟 + 公招助手.lnk"),
+            os.path.join(w.start_menu_dir(), "公招助手.lnk")]
+
+
+def apply_startup(mode: str, shortcut: bool, cfg: dict, exe: str | None = None) -> bool:
+    """创建/删除计划任务与快捷方式。需要管理员。exe=安装后的程序路径（exe 版）"""
     ico, vbs = ensure_assets()
-    ok = w.create_task("Open", "", logon=False)
+    ok = w.create_task("Open", "", logon=False, exe=exe)
     if mode == "logon":
-        ok &= w.create_task("Logon", "--background", logon=True)
+        ok &= w.create_task("Logon", "--background", logon=True, exe=exe)
     else:
         w.delete_task("Logon")
-    desk = w.desktop_dir()
-    game_lnk = os.path.join(desk, "明日方舟 + 公招助手.lnk")
+    desk_lnk, game_lnk, menu_lnk = _lnk_names()
     if mode == "with_game":
-        ok &= w.create_task("Game", "--with-game", logon=False)
-        launcher = cfg.get("launcher") or ""
+        ok &= w.create_task("Game", "--with-game", logon=False, exe=exe)
         icon = ico
         appdata_icon = os.path.join(os.environ.get("APPDATA", ""), "Hypergryph")
         if os.path.isdir(appdata_icon):
@@ -187,27 +205,63 @@ def apply_startup(mode: str, shortcut: bool, cfg: dict) -> bool:
                     icon = os.path.join(root, "arknights.ico")
                     break
         w.create_shortcut(game_lnk, "wscript.exe", f'"{vbs}" Game', icon, HERE)
-        _ = launcher
     else:
         w.delete_task("Game")
         if os.path.exists(game_lnk):
             os.remove(game_lnk)
-    lnk = os.path.join(desk, "公招助手.lnk")
+    # 开始菜单总是创建；桌面按选择
+    w.create_shortcut(menu_lnk, "wscript.exe", f'"{vbs}" Open', ico, HERE)
     if shortcut:
-        w.create_shortcut(lnk, "wscript.exe", f'"{vbs}" Open', ico, HERE)
-    elif os.path.exists(lnk):
-        os.remove(lnk)
+        w.create_shortcut(desk_lnk, "wscript.exe", f'"{vbs}" Open', ico, HERE)
+    elif os.path.exists(desk_lnk):
+        os.remove(desk_lnk)
     return ok
 
 
 def remove_startup():
     for n in ("Open", "Logon", "Game"):
         w.delete_task(n)
-    desk = w.desktop_dir()
-    for n in ("公招助手.lnk", "明日方舟 + 公招助手.lnk"):
-        p = os.path.join(desk, n)
+    for p in _lnk_names():
         if os.path.exists(p):
             os.remove(p)
+
+
+def stop_running_instance():
+    """更新时：让已在运行的旧版本退出，以便覆盖 exe"""
+    try:
+        c = socket.create_connection(("127.0.0.1", PORT), timeout=2)
+        c.sendall(b"quit")
+        c.close()
+        time.sleep(2.0)
+    except OSError:
+        pass
+
+
+def install_self() -> str | None:
+    """exe 版：把自己复制到固定的安装位置，返回安装后的路径。源码版返回 None"""
+    if not w.FROZEN:
+        return None
+    if w.is_installed_copy():
+        return w.INSTALLED_EXE
+    import shutil
+    stop_running_instance()
+    os.makedirs(w.INSTALL_DIR, exist_ok=True)
+    for _ in range(10):
+        try:
+            shutil.copy2(sys.executable, w.INSTALLED_EXE)
+            break
+        except PermissionError:
+            time.sleep(1)
+    return w.INSTALLED_EXE
+
+
+def uninstall_everything():
+    """移除计划任务、快捷方式，并在退出后删除程序和数据"""
+    remove_startup()
+    if w.FROZEN:
+        dirs = [w.INSTALL_DIR, rc.USER_DIR]
+        cmd = "ping 127.0.0.1 -n 4 >nul & " + " & ".join(f'rmdir /s /q "{d}"' for d in dirs)
+        subprocess.Popen(["cmd", "/c", cmd], creationflags=w.CREATE_NO_WINDOW, cwd=os.environ.get("TEMP", "C:\\"))
 
 
 # ====================================================================== App
@@ -968,7 +1022,7 @@ class App:
         row.pack(fill="x", pady=(4, 0))
         tk.Button(row, text=self.t("data_update"), command=lambda: self.update_data(force=True), bg=CHIP, fg=TXT,
                   relief="flat", font=(CN, px(10)), padx=10).pack(side="left")
-        tk.Button(row, text=self.t("s_remove"), command=self.remove_all, bg=ROW, fg=SUB, relief="flat",
+        tk.Button(row, text=self.t("u_btn") if w.FROZEN else self.t("s_remove"), command=self.remove_all, bg=ROW, fg=SUB, relief="flat",
                   font=(CN, px(10)), padx=10).pack(side="right")
 
     def set_lang(self, lang):
@@ -994,12 +1048,18 @@ class App:
         self.setcfg(startup=mode)
         shortcut = self.cfg.get("shortcut", True)
         if w.is_admin():
-            ok = apply_startup(mode, shortcut, self.cfg)
+            ok = apply_startup(mode, shortcut, self.cfg, w.INSTALLED_EXE if w.FROZEN else None)
         else:
             ok = w.relaunch_as_admin(["--apply-startup"], wait=True)
         self.status(self.t("applied_startup") if ok else self.t("startup_fail"))
 
     def remove_all(self):
+        if w.FROZEN:  # exe 版：完整卸载
+            from tkinter import messagebox
+            if messagebox.askyesno(self.t("u_btn"), self.t("u_confirm"), parent=self.settings_win or self.root):
+                uninstall_everything()
+                self.quit()
+            return
         self.setcfg(startup="manual", shortcut=False)
         if w.is_admin():
             remove_startup()
@@ -1086,6 +1146,8 @@ class App:
                     c.close()
                     if msg == b"show":
                         self.root.after(0, self.show_main)
+                    elif msg == b"quit":
+                        self.root.after(0, self.quit)
                 except OSError:
                     return
         threading.Thread(target=serve, daemon=True).start()
@@ -1101,79 +1163,108 @@ class App:
 
 
 # ====================================================================== wizard
-def run_wizard(root: tk.Tk, cfg: dict) -> bool:
-    """首次设置。返回 True=继续启动"""
-    lang = cfg.get("lang", "zh")
+def do_install(cfg: dict, lang: str, startup: str, shortcut: bool):
+    launcher = w.find_launcher()
+    cfg.update(lang=lang, startup=startup, shortcut=shortcut, setup_done=True,
+               on_exit=cfg.get("on_exit", "stay"), version=VERSION)
+    if launcher:
+        cfg.update(launcher=launcher[0], launcher_args=launcher[1])
+    save_config(cfg)
+    exe = install_self()
+    if w.is_admin():
+        return apply_startup(startup, shortcut, cfg, exe)
+    return w.relaunch_as_admin(["--apply-startup"], wait=True)
+
+
+
+def run_wizard(root: tk.Tk, cfg: dict, installer: bool) -> bool:
+    """首次设置（exe 版同时负责安装）。一个大按钮搞定，选项默认收起。返回 True=已完成"""
     win = tk.Toplevel(root)
-    win.title("Setup")
+    win.title("公招助手 / Recruit Helper")
     win.configure(bg=BG)
     win.resizable(False, False)
-    st = {"lang": lang, "startup": "logon", "shortcut": True, "done": False}
+    try:
+        from PIL import ImageTk
+        win._icon = ImageTk.PhotoImage(make_icon(64))
+        win.iconphoto(True, win._icon)
+    except Exception:  # noqa: BLE001
+        pass
+    st = {"lang": cfg.get("lang") or w.ui_lang(), "startup": cfg.get("startup", "logon"),
+          "shortcut": cfg.get("shortcut", True), "done": False, "more": False}
     body = tk.Frame(win, bg=BG)
-    body.pack(fill="both", padx=22, pady=18)
+    body.pack(fill="both", padx=26, pady=20)
+    WRAP = 480
 
-    def build():
+    def build(busy=False):
         T = TEXT[st["lang"]]
         for c in body.winfo_children():
             c.destroy()
-        cv = tk.Canvas(body, width=460, height=70, bg=BG, highlightthickness=0)
+        cv = tk.Canvas(body, width=WRAP, height=70, bg=BG, highlightthickness=0)
         cv.pack(fill="x")
         cv.create_rectangle(0, 8, 4, 62, fill=ACCENT, outline="")
-        cv.create_text(16, 26, text=T["w_title"], anchor="w", fill=TXT, font=(CN, px(20), "bold"))
-        cv.create_text(16, 52, text="ARKNIGHTS · RECRUITMENT HELPER", anchor="w", fill=SUB, font=(EN, px(11)))
-        tk.Label(body, text=T["w_sub"], bg=BG, fg=TXT, font=(CN, px(12)), wraplength=460, justify="left",
-                 anchor="w").pack(fill="x", pady=(4, 10))
+        cv.create_text(16, 26, text=T["w_title"], anchor="w", fill=TXT, font=(CN, px(21), "bold"))
+        cv.create_text(16, 52, text="ARKNIGHTS · RECRUITMENT HELPER  v" + VERSION, anchor="w", fill=SUB,
+                       font=(EN, px(11)))
+        steps = tk.Frame(body, bg=PANEL)
+        steps.pack(fill="x", pady=(10, 4))
+        tk.Label(steps, text=T["w_steps"], bg=PANEL, fg=TXT, font=(CN, px(13)), justify="left", anchor="w",
+                 wraplength=WRAP - 28).pack(fill="x", padx=14, pady=12)
+        if st["startup"] == "logon":
+            tk.Label(body, text=T["w_auto"], bg=BG, fg=SUB, font=(CN, px(11)), anchor="w", wraplength=WRAP,
+                     justify="left").pack(fill="x", pady=(4, 0))
 
-        def seg(options, key, rebuild=False):
-            fr = tk.Frame(body, bg=BG)
+        text = T["w_installing"] if busy else (T["w_install"] if installer else T["w_start"])
+        go = tk.Label(body, text=text, bg=ACCENT, fg="white", font=(CN, px(16), "bold"), pady=12,
+                      cursor="" if busy else "hand2")
+        go.pack(fill="x", pady=(16, 6))
+        if busy:
+            return
+        go.bind("<Button-1>", lambda e: finish())
+        go.bind("<Enter>", lambda e: go.configure(bg="#1AA8E8"))
+        go.bind("<Leave>", lambda e: go.configure(bg=ACCENT))
+
+        # ---- 更多选项（默认收起）----
+        more = tk.Label(body, text=("▾ " if st["more"] else "▸ ") + T["w_more"], bg=BG, fg=SUB,
+                        font=(CN, px(11)), cursor="hand2", anchor="w")
+        more.pack(fill="x", pady=(6, 0))
+        more.bind("<Button-1>", lambda e: (st.update(more=not st["more"]), build()))
+        if not st["more"]:
+            return
+        opt = tk.Frame(body, bg=BG)
+        opt.pack(fill="x", pady=(4, 0))
+
+        def seg(options, key):
+            fr = tk.Frame(opt, bg=BG)
             fr.pack(fill="x", pady=(0, 6))
             var = tk.StringVar(value=st[key])
-
-            def ch():
-                st[key] = var.get()
-                if rebuild:
-                    build()
             for val, label in options:
                 tk.Radiobutton(fr, text=label, value=val, variable=var, indicatoron=False, bg=CHIP, fg=TXT,
                                selectcolor=ACCENT, activebackground="#555", relief="flat", bd=0,
-                               font=(CN, px(11)), padx=12, pady=5, command=ch).pack(side="left", padx=(0, 2))
+                               font=(CN, px(11)), padx=12, pady=5,
+                               command=lambda: (st.update({key: var.get()}), build())).pack(side="left", padx=(0, 2))
 
         def label(text):
-            tk.Label(body, text=text, bg=BG, fg=SUB, font=(CN, px(11), "bold"), anchor="w").pack(fill="x", pady=(8, 3))
+            tk.Label(opt, text=text, bg=BG, fg=SUB, font=(CN, px(11), "bold"), anchor="w").pack(fill="x", pady=(6, 3))
         label(T["s_lang"])
-        seg([("zh", "中文"), ("en", "English")], "lang", rebuild=True)
+        seg([("zh", "中文"), ("en", "English")], "lang")
         label(T["s_start"])
         var = tk.StringVar(value=st["startup"])
         for val in ("logon", "with_game", "manual"):
-            tk.Radiobutton(body, text=T["st_" + val], value=val, variable=var, bg=BG, fg=TXT, selectcolor=CHIP,
+            tk.Radiobutton(opt, text=T["st_" + val], value=val, variable=var, bg=BG, fg=TXT, selectcolor=CHIP,
                            activebackground=BG, activeforeground=TXT, font=(CN, px(12)), anchor="w",
-                           command=lambda: st.update(startup=var.get())).pack(fill="x")
-        tk.Label(body, text=T["st_desc"], bg=BG, fg=SUB, font=(CN, px(10)), wraplength=460, justify="left",
-                 anchor="w").pack(fill="x", pady=(2, 8))
+                           command=lambda: (st.update(startup=var.get()), build())).pack(fill="x")
+        tk.Label(opt, text=T["st_desc"], bg=BG, fg=SUB, font=(CN, px(10)), wraplength=WRAP, justify="left",
+                 anchor="w").pack(fill="x", pady=(2, 6))
         sv = tk.BooleanVar(value=st["shortcut"])
-        tk.Checkbutton(body, text=T["w_shortcut"], variable=sv, command=lambda: st.update(shortcut=sv.get()),
+        tk.Checkbutton(opt, text=T["w_shortcut"], variable=sv, command=lambda: st.update(shortcut=sv.get()),
                        bg=BG, fg=TXT, selectcolor=CHIP, activebackground=BG, activeforeground=TXT,
                        font=(CN, px(12)), anchor="w").pack(fill="x")
-        tk.Label(body, text=T["hotkeys"], bg=BG, fg=SUB, font=(CN, px(10)), anchor="w").pack(fill="x", pady=(10, 0))
-        if not w.is_admin():
-            tk.Label(body, text=T["w_admin"], bg=BG, fg=WARN, font=(CN, px(10)), wraplength=460, justify="left",
-                     anchor="w").pack(fill="x", pady=(4, 0))
-        go = tk.Label(body, text=T["w_go"], bg=ACCENT, fg="white", font=(CN, px(14), "bold"), pady=8,
-                      cursor="hand2")
-        go.pack(fill="x", pady=(16, 0))
-        go.bind("<Button-1>", lambda e: finish())
+        tk.Label(opt, text=T["hotkeys"], bg=BG, fg=SUB, font=(CN, px(10)), anchor="w").pack(fill="x", pady=(8, 0))
 
     def finish():
-        launcher = w.find_launcher()
-        cfg.update(lang=st["lang"], startup=st["startup"], shortcut=st["shortcut"], setup_done=True,
-                   on_exit="stay")
-        if launcher:
-            cfg.update(launcher=launcher[0], launcher_args=launcher[1])
-        save_config(cfg)
-        if w.is_admin():
-            apply_startup(st["startup"], st["shortcut"], cfg)
-        else:
-            w.relaunch_as_admin(["--apply-startup"], wait=True)
+        build(busy=True)
+        win.update()
+        do_install(cfg, st["lang"], st["startup"], st["shortcut"])
         st["done"] = True
         win.destroy()
 
@@ -1184,20 +1275,70 @@ def run_wizard(root: tk.Tk, cfg: dict) -> bool:
     y = (win.winfo_screenheight() - win.winfo_reqheight()) // 3
     win.geometry(f"+{x}+{y}")
     win.lift()
+    win.attributes("-topmost", True)
+    win.after(500, lambda: win.attributes("-topmost", False))
     win.focus_force()
     root.wait_window(win)
     return st["done"]
 
 
 # ====================================================================== main
+def selftest(out: str | None) -> int:
+    lines = [f"version {VERSION} frozen={w.FROZEN}", f"user_dir {rc.USER_DIR}"]
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import numpy as np
+        pools = {s: rc.Pool(s) for s in ("cn", "en")}
+        lines.append("pools " + " ".join(f"{k}={len(v.ops)}" for k, v in pools.items()))
+        im = Image.new("RGB", (900, 300), (40, 40, 45))
+        d = ImageDraw.Draw(im)
+        font = ImageFont.truetype("C:/Windows/Fonts/msyh.ttc", 22)
+        for i, t in enumerate(["高级资深干员", "近卫干员", "输出", "控场", "近战位"]):
+            x, y = 60 + (i % 3) * 260, 60 + (i // 3) * 90
+            d.rectangle([x, y, x + 200, y + 44], fill=(49, 49, 49))
+            d.text((x + 20, y + 8), t, fill="white", font=font)
+        t0 = time.time()
+        s = OCR().scan(np.array(im)[:, :, ::-1].copy(), pools)
+        lines.append(f"ocr {time.time() - t0:.2f}s tags=" + ",".join(pools[s.srv].tags[t] for t in s.tags))
+        lines.append("verdict " + rc.verdict(rc.calc(pools[s.srv], s.tags))[0])
+        code = 0 if len(s.tags) == 5 else 1
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        lines.append("ERROR " + traceback.format_exc())
+        code = 2
+    text = "\n".join(lines)
+    if out:
+        open(out, "w", encoding="utf-8").write(text)
+    else:
+        print(text)
+    return code
+
+
 def main():
     args = sys.argv[1:]
     cfg = load_config()
+    exe = w.INSTALLED_EXE if w.FROZEN else None
     if "--apply-startup" in args:  # 由非管理员实例提权调用
-        sys.exit(0 if apply_startup(cfg.get("startup", "manual"), cfg.get("shortcut", True), cfg) else 1)
+        sys.exit(0 if apply_startup(cfg.get("startup", "manual"), cfg.get("shortcut", True), cfg, exe) else 1)
     if "--remove-startup" in args:
         remove_startup()
         sys.exit(0)
+    if "--selftest" in args:  # 只读自检：数据、OCR 模型、识别一张生成的图片
+        sys.exit(selftest(args[args.index("--selftest") + 1] if len(args) > args.index("--selftest") + 1 else None))
+
+    # exe 版、且不是从安装位置运行（例如刚从下载文件夹双击）→ 安装 / 更新
+    if not w.is_installed_copy():
+        if "--quiet-install" in args:  # 无界面安装（默认选项）
+            ok = do_install(cfg, cfg.get("lang") or w.ui_lang(), cfg.get("startup", "logon"), cfg.get("shortcut", True))
+            if ok and "--no-launch" not in args:
+                w.run_task("Open")
+            sys.exit(0 if ok else 1)
+        root = tk.Tk()
+        root.withdraw()
+        if run_wizard(root, cfg, installer=True):
+            w.run_task("Open")  # 以管理员打开安装好的副本（不再弹 UAC）
+        root.destroy()
+        return
 
     mode = "with_game" if "--with-game" in args else "background" if "--background" in args else "normal"
 
@@ -1223,7 +1364,7 @@ def main():
     root = tk.Tk()
     root.withdraw()
     if "--setup" in args or not cfg.get("setup_done"):
-        if not run_wizard(root, cfg) and not cfg.get("setup_done"):
+        if not run_wizard(root, cfg, installer=False) and not cfg.get("setup_done"):
             root.destroy()
             return
     App._sock = sock

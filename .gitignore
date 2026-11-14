@@ -10,3 +10,9 @@ assets/
 # 编辑器 / editors
 .vscode/
 .idea/
+
+# 打包产物 / build output
+build/
+dist/
+*.spec
+.venv-build/

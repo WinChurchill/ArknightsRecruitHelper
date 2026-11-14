@@ -1,50 +1,77 @@
 # 明日方舟 公招助手 / Arknights Recruit Helper
 
-进到公开招募的 tag 界面，助手直接**在游戏画面上**用角括号标出该选的 tag，并在公招对话框正下方嵌入一行
-和游戏同风格的「招募建议」（放不下时自动改为侧边面板；设置里可切换）。
-**点一下组合，自动帮你勾选 tag 并把时间调到 9:00（小车 3:50）。** 国服 / 国际服自动识别，界面中英双语。
+打开公开招募，助手直接在游戏画面里告诉你**这次能不能出好干员、该选哪几个 tag**，
+点一下就帮你选好 tag 和时间。你只需要按确认。
 
-## 安装（第一次）
-1. 把整个文件夹放到一个固定位置（例如 `D:\ArkRecruitHelper`）—— 自启动会记住这个路径
-2. 双击 **`setup.bat`**：检查 Python（没有就用 winget 装）→ 安装依赖（失败自动换清华镜像）→ 打开设置向导
-3. 向导里选语言、启动方式，点「开始使用」。会请求**一次**管理员权限，之后不再弹 UAC
+![游戏内效果](docs/in-game.png)
 
-之后用桌面的「公招助手」或 `run.bat` 打开。
+---
 
-## 启动方式
-| 方式 | 说明 |
+## 怎么用（3 步）
+
+1. 到 **[Releases](../../releases/latest)** 下载 **`ArknightsRecruitHelper.exe`**
+2. 双击它，Windows 问「是否允许此应用更改设备」时点 **是**
+3. 点蓝色大按钮 **「安装并开始使用」**
+
+![安装界面](docs/install.png)
+
+完成！以后开机它会自己在后台待命，**不用再打开任何东西**。
+进游戏 → 公开招募 → 点一个空的招募位，下方就会出现「招募建议」。
+
+### 如果出现「Windows 已保护你的电脑」
+这是因为这个小工具没有花钱买微软签名，不是病毒。点 **「更多信息」→「仍要运行」** 即可。
+
+### 招募建议怎么看
+| 显示 | 意思 |
 |---|---|
-| **开机后台待命**（推荐） | 登录后在托盘静默等待；检测到游戏才加载 OCR，游戏关闭就释放 |
-| **随游戏启动** | 桌面多一个「明日方舟 + 公招助手」快捷方式：启动鹰角启动器 + 助手，游戏关闭后助手自动退出 |
-| 手动 | 需要时自己打开 |
+| **6★** 橙色 | 有「高级资深干员」，必出六星！ |
+| **5★** 金色 | 选这几个 tag 必出五星 |
+| **4★** 紫色 | 选这几个 tag 必出四星 |
+| **1★ 小车** | 只选「支援机械」，时间 3:50，必出小车 |
+| 只能三星 | 建议点游戏里的刷新 |
 
-## 什么时候干活（省资源）
-- 只在**游戏是当前窗口**时工作；切走、最小化 → 叠加层隐藏、停止截图
-- 每 0.4 秒截一张游戏窗口缩略图（约 15ms）。**画面没变就不 OCR**；画面在变（动画/战斗）就等它停下
-- 只有识别到 ≥3 个公招 tag 才显示叠加层；确认招募或离开界面后自动消失
-- 游戏关闭：卸载 OCR 模型；按设置退出或回到托盘待命
+点建议上的按钮 → 助手自动勾选 tag、设好时间 → 你检查一下，点确认就行。
+（助手**永远不会**替你点确认或刷新。）
 
-## 自动选择
-- 点面板（或主窗口）里任意组合：先取消多余的 tag，再选上组合里的 tag，然后调时间，最后重新识别确认
-- **只点 tag 和时间箭头，永远不会点确认招募 / 刷新**
-- 游戏由鹰角启动器以管理员运行，所以助手也必须以管理员运行才能点（安装时的计划任务已处理）
+### 常见问题
+- **看不到招募建议？** 游戏要用窗口或无边框模式（不要独占全屏）。也可以按 **F8** 手动识别。
+- **想暂时隐藏？** 按 **F9**。
+- **设置 / 卸载？** 右下角任务栏托盘里的蓝色菱形图标 → 设置。卸载在设置最下方。
+- **更新？** 下载新版 exe 双击即可，会自动替换旧版。干员数据会在每次游戏启动时自动更新。
+- **国际服 / English？** 自动识别；界面语言跟随系统，也可在设置里改。
 
-## 热键
-| F8 | 立即识别 | F9 | 显示/隐藏叠加层 |
-|---|---|---|---|
+---
 
-## 数据更新
-来源：[ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData)（国服）/ ArknightsGameData_YoStar（国际服）解包数据（PRTS 等 wiki 同源）。
-- 设置里选时机：**游戏启动时**（默认，30 分钟内不重复）/ 每 6 小时 / 仅手动
-- 只下载约 0.5MB 的公招表比对，卡池或 tag 有变化才下载完整干员表；国内网络自动尝试 GitHub 镜像
+## For English players
 
-## 其他
-- 模拟器：设置 →「识别范围」→ 框选区域（自动点选只支持官方 PC 端）
-- 游戏请用窗口化 / 无边框，独占全屏下叠加层显示不出来
-- 叠加层鼠标穿透、对截图不可见，不会挡操作也不会干扰识别；面板可拖动，位置会记住
-- 卸载：设置 →「移除自启动和快捷方式」，然后删除文件夹
-- 规则：按 9 小时计算（不出 1/2 星；无「高级资深干员」不出 6 星）；「新手」只出 2 星不参与计算
+1. Download **`ArknightsRecruitHelper.exe`** from **[Releases](../../releases/latest)**
+2. Double-click it and allow the admin prompt
+3. Press **Install & start**
 
-## 文件
-`app.py` 主程序（监视循环、主窗口、设置、托盘、向导） · `overlay.py` 游戏风格叠加层 ·
-`ocr_engine.py` OCR + 公招界面几何 · `winutil.py` 窗口/截图/点击/计划任务 · `recruit_core.py` 数据与组合计算
+It then starts with Windows automatically. Open Recruitment in the game, tap an empty slot,
+and an **Advice** row appears under the dialog. Click a suggestion and the tags and timer are set for you;
+you just press confirm. If Windows shows "Windows protected your PC", click **More info → Run anyway**.
+
+---
+
+## 开发者 / Developers
+
+```
+python app.py            # 从源码运行（首次会打开设置向导）
+setup.bat                # 源码版安装依赖 + 向导
+build.bat                # 打包成 dist\ArknightsRecruitHelper.exe（干净 venv，约 100MB）
+python app.py --selftest # 自检：数据 + OCR
+```
+
+发布：推送 `v*` 标签（例如 `git tag v1.0.1 && git push origin v1.0.1`），GitHub Actions 会自动打包、自检并发布到 Releases。
+
+| 文件 | 作用 |
+|---|---|
+| `app.py` | 主程序：监视循环、主窗口、设置、托盘、安装向导、自动选择 |
+| `overlay.py` | 游戏风格界面：嵌入卡片、括号标记、侧边面板 |
+| `ocr_engine.py` | OCR + 公招界面几何（tag 位置、选中状态、时间箭头） |
+| `winutil.py` | 游戏窗口、截图、点击、计划任务、快捷方式、安装路径 |
+| `recruit_core.py` | 干员数据下载/自动更新、tag 匹配、组合计算 |
+
+运行方式：exe 版装在 `%LOCALAPPDATA%\Programs\ArknightsRecruitHelper`，设置和数据在 `%APPDATA%\ArknightsRecruitHelper`。
+助手只在游戏是当前窗口、且画面变化后才做 OCR；数据来自 [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData)。

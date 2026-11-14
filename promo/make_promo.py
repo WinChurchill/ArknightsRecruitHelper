@@ -1,7 +1,7 @@
 """明日方舟 公招助手 —— 宣传视频生成器（明日方舟风格 UI 动效）
 
 用法：
-  python promo/make_promo.py <公招界面截图.png> [--lang zh] [--out promo/out/promo_16x9.mp4] [--preview 秒数...]
+  python promo/make_promo.py <公招界面截图.png> [--music 歌曲.mp3 --music-start 秒] [--out ...] [--preview 秒数...]
 
 - 截图：游戏公开招募 tag 界面（越清晰越好，1920x1080 最佳）。脚本会自动识别 tag 位置。
 - 卡片和括号用程序自带的叠加层代码绘制，和真实效果一致。
@@ -539,6 +539,9 @@ def main():
     ap.add_argument("--lang", default="zh")
     ap.add_argument("--out", default=os.path.join(HERE, "out", "promo_16x9.mp4"))
     ap.add_argument("--preview", nargs="*", type=float)
+    ap.add_argument("--music", help="背景音乐文件（你自己的，例如官方 OST）；不填则无声")
+    ap.add_argument("--music-start", type=float, default=0.0, help="从歌曲的第几秒开始用")
+    ap.add_argument("--music-db", type=float, default=-3.0, help="音乐音量（dB）")
     a = ap.parse_args()
     sc = Scene(a.shot, a.lang)
     cache = prepare(sc)
@@ -551,7 +554,8 @@ def main():
         return
     import imageio_ffmpeg
     n = int(DUR * FPS)
-    w = imageio_ffmpeg.write_frames(a.out, (W, H), fps=FPS, codec="libx264", pix_fmt_out="yuv420p", macro_block_size=1,
+    video_only = a.out.replace(".mp4", "_video.mp4") if a.music else a.out
+    w = imageio_ffmpeg.write_frames(video_only, (W, H), fps=FPS, codec="libx264", pix_fmt_out="yuv420p", macro_block_size=1,
                                     output_params=["-crf", "18", "-preset", "medium", "-movflags", "+faststart"])
     w.send(None)
     for i in range(n):
@@ -559,6 +563,11 @@ def main():
         if i % 60 == 0:
             print(f"frame {i}/{n}", flush=True)
     w.close()
+    if a.music:
+        import audio
+        audio.mux_music(video_only, a.music, a.out, imageio_ffmpeg.get_ffmpeg_exe(), DUR,
+                        start=a.music_start, volume_db=a.music_db)
+        os.remove(video_only)
     print("done", a.out)
 
 

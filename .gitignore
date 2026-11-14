@@ -18,3 +18,4 @@ dist/
 .venv-build/
 models/
 promo/out/
+promo/assets/

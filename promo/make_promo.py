@@ -418,29 +418,45 @@ def scan_line(frame, t, sc):
            (120, 210, 255, 255), 0.14, anchor="ld")
 
 
+PRESS_T = 17.3  # 按下「小时」下箭头的时刻
+
+
 def roll_hours(sc, frame, t):
-    """时间的「小时」从 01 滚到 09（按下箭头 8 次的效果）"""
-    if not sc.time_box:
+    """小时从 01 变成 09：和程序实际行为一致——按一次下箭头（1 往下循环到 9），不是往上按 8 次"""
+    if not sc.time_box or t < PRESS_T - 0.25:
         return
+    p = sc.p
+    arr = sc.scan.arrows()
+    d = ImageDraw.Draw(frame)
+    # 1) 下箭头按钮：按下时变成游戏蓝
+    if arr and PRESS_T - 0.25 <= t < PRESS_T + 0.35:
+        ax, ay = arr["h_down"]
+        k = 1 - abs(t - PRESS_T) / 0.35 if t < PRESS_T + 0.35 else 0
+        col = tuple(int(49 + (c - 49) * max(0.0, min(1.0, k * 1.6))) for c in BLUE)
+        d.rectangle([ax - 0.98 * p, ay - 0.31 * p, ax + 0.98 * p, ay + 0.31 * p], fill=col + (255,))
+        w_ = max(2, int(p / 26))
+        d.line([(ax - 0.17 * p, ay - 0.07 * p), (ax, ay + 0.08 * p), (ax + 0.17 * p, ay - 0.07 * p)],
+               fill=(255, 255, 255, 255), width=w_, joint="curve")
+    if t < PRESS_T:
+        return
+    # 2) 数字：01 往下滑出，09 从上方滑入
     x0, y0, x1, y1 = sc.time_box
     hw = (x1 - x0) * 0.22  # 小时两位数大约占时间文字宽度的 22%
-    q = ease_in_out(prog(t, 17.1, 18.1))
-    hour = 1 + int(round(8 * q)) if t >= 17.1 else 1
-    if hour == 1 and t < 17.1:
-        return
-    d = ImageDraw.Draw(frame)
-    bg = frame.getpixel((int(x0 - 6), int((y0 + y1) / 2)))
-    d.rectangle([x0 - 2, y0 - 4, x0 + hw + 6, y1 + 4], fill=bg)
+    bx0, by0, bx1, by1 = int(x0 - 2), int(y0 - 6), int(x0 + hw + 8), int(y1 + 6)
+    # 背景：用框左右两侧真实像素逐行渐变填充，和卡片的细微渐变融为一体（不会出现色块）
+    region = np.asarray(frame.crop((bx0 - 3, by0, bx1 + 3, by1)).convert("RGB"), dtype=np.float32)
+    left, right = region[:, :3].mean(axis=1), region[:, -3:].mean(axis=1)
+    wgt = np.linspace(0, 1, bx1 - bx0)[None, :, None]
+    fill = left[:, None, :] * (1 - wgt) + right[:, None, :] * wgt
+    box = Image.fromarray(fill.astype(np.uint8), "RGB").convert("RGBA")
+    db = ImageDraw.Draw(box)
     f = F((y1 - y0) * 1.05, en=True, var="SemiLight")
-    d.text((x0 + hw / 2 + 2, (y0 + y1) / 2), f"{hour:02d}", font=f, fill=(58, 58, 60, 255), anchor="mm")
-    if 17.1 <= t < 18.2:  # 下箭头按下的闪烁
-        arr = sc.scan.arrows()
-        if arr:
-            ax, ay = arr["h_down"]
-            r = 0.5 * sc.p
-            d.rectangle([ax - 0.95 * sc.p, ay - 0.3 * sc.p, ax + 0.95 * sc.p, ay + 0.3 * sc.p],
-                        outline=BLUE + (255,), width=3)
-            _ = r
+    q = ease_out(prog(t, PRESS_T, PRESS_T + 0.28))
+    hgt = by1 - by0
+    cx, cy = (x0 + hw / 2 + 2) - bx0, (y0 + y1) / 2 - by0
+    db.text((cx, cy + q * hgt), "01", font=f, fill=(58, 58, 60, int(255 * (1 - q))), anchor="mm")
+    db.text((cx, cy - (1 - q) * hgt), "09", font=f, fill=(58, 58, 60, 255), anchor="mm")
+    frame.alpha_composite(box, (bx0, by0))
 
 
 def cursor(frame, t, cache):
@@ -456,6 +472,13 @@ def cursor(frame, t, cache):
         r = 10 + 70 * prog(t, 16.2, 16.9)
         d.ellipse([x - r, y - r, x + r, y + r], outline=(255, 255, 255, int(255 * (1 - prog(t, 16.2, 16.9)))), width=4)
     s = 1.0 if not (16.2 <= t < 16.35) else 0.85
+    cur = cache.get("cursor")
+    if cur:  # 游戏自己的指针（由 capture_assets.py 采集）
+        img, (hx, hy) = cur
+        k = cache["cursor_scale"] * s
+        im = img.resize((max(1, int(img.width * k)), max(1, int(img.height * k))), Image.LANCZOS)
+        frame.alpha_composite(im, (int(x - hx * k), int(y - hy * k)))
+        return
     pts = [(0, 0), (0, 36), (9, 27), (16, 42), (22, 39), (15, 25), (27, 25)]
     poly = [(x + px * s * 1.3, y + py * s * 1.3) for px, py in pts]
     d.polygon([(px + 3, py + 3) for px, py in poly], fill=(0, 0, 0, 120))
@@ -528,6 +551,14 @@ def prepare(sc: Scene):
     cache["six_xy"] = (dl + (dr - dl) * 0.52, dt - 0.2 * sc.p)
     cache["tags6"] = tags6
     sc.scan = orig_scan
+    cur_png = os.path.join(HERE, "assets", "cursor.png")
+    if os.path.exists(cur_png):
+        import json
+        cimg = Image.open(cur_png).convert("RGBA")
+        hot = json.load(open(os.path.join(HERE, "assets", "cursor.json")))["hotspot"]
+        cache["cursor"] = (cimg, tuple(hot))
+        cache["cursor_scale"] = 46 / max(1, cimg.getbbox()[3] - cimg.getbbox()[1])  # 视频里约 46px 高，看得清
+        print("using game pointer", cimg.size, "hotspot", hot)
     icon = appmod.make_icon(128).convert("RGBA")
     cache["icon"] = icon
     return cache
@@ -535,7 +566,8 @@ def prepare(sc: Scene):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("shot")
+    ap.add_argument("shot", nargs="?", default=os.path.join(HERE, "assets", "recruit.png"),
+                    help="公招界面截图（默认 promo/assets/recruit.png，由 capture_assets.py 采集）")
     ap.add_argument("--lang", default="zh")
     ap.add_argument("--out", default=os.path.join(HERE, "out", "promo_16x9.mp4"))
     ap.add_argument("--preview", nargs="*", type=float)

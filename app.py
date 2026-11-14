@@ -38,12 +38,13 @@ ASSETS = os.path.join(HERE, "assets")
 SCRIPTS_DIR = os.path.join(w.INSTALL_DIR, "assets") if w.FROZEN else ASSETS
 PAUSED_FLAG = os.path.join(HERE, "paused.flag")  # “完全退出”标记：看门狗不再拉起，直到下次登录
 LOG_PATH = os.path.join(HERE, "log.txt")
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 PORT = 47391
 HOTKEY_SCAN, HOTKEY_OVERLAY = "f8", "f9"
 TICK_MS = 400
 log = logging.getLogger("ark")
 DIFF_T = 0.3  # 缩略图变化阈值
+FAST_HIDE_T = 6.0  # 大于它视为离开了公招界面（实测：选 tag≈0.4，关对话框/切界面≈37~88）
 
 TEXT = {
     "zh": {
@@ -77,7 +78,8 @@ TEXT = {
         "s_data": "干员数据", "data_update": "立即更新", "data_info": "国服 {cn} 人 · 国际服 {en} 人 · 上次检查 {t}",
         "s_launcher": "鹰角启动器", "browse": "浏览…",
         "s_remove": "移除自启动和快捷方式",
-        "need_admin_short": "⚠ 以管理员运行才能自动点选（点此）", "card_label": "招募建议", "s_style": "结果显示", "style_card": "嵌入公招界面", "style_panel": "侧边面板",
+        "need_admin_short": "⚠ 以管理员运行才能自动点选（点此）", "card_label": "招募建议",
+        "ops_more": "等 {n} 名", "more_combos": "还有 {n} 个", "s_style": "结果显示", "style_card": "嵌入公招界面", "style_panel": "侧边面板",
         "s_update": "数据更新时机", "up_game": "游戏启动时", "up_6h": "每 6 小时", "up_manual": "仅手动",
         "region_tip": "拖动框选游戏画面（模拟器窗口），Esc 取消",
         "updating": "正在更新数据…", "updated": "数据已更新", "uptodate": "数据已是最新",
@@ -128,7 +130,8 @@ TEXT = {
         "s_data": "Operator data", "data_update": "Update now", "data_info": "CN {cn} · Global {en} · checked {t}",
         "s_launcher": "Hypergryph launcher", "browse": "Browse…",
         "s_remove": "Remove autostart & shortcuts",
-        "need_admin_short": "⚠ Run as admin to auto-select (click)", "card_label": "Advice", "s_style": "Result display", "style_card": "Inside recruit dialog", "style_panel": "Side panel",
+        "need_admin_short": "⚠ Run as admin to auto-select (click)", "card_label": "Advice",
+        "ops_more": "+{n} more", "more_combos": "{n} more", "s_style": "Result display", "style_card": "Inside recruit dialog", "style_panel": "Side panel",
         "s_update": "Check for new data", "up_game": "When game starts", "up_6h": "Every 6h", "up_manual": "Manual only",
         "region_tip": "Drag to select the game area (emulator), Esc to cancel",
         "updating": "Updating data…", "updated": "Data updated", "uptodate": "Data is up to date",
@@ -557,6 +560,15 @@ class App:
             return
         img, _ = w.grab(area)
         thumb = img[::8, ::8].mean(axis=2)
+        # 快速关闭：正在显示建议时，画面和识别时相比大变（关闭对话框/切界面）→ 立刻隐藏，不等 OCR。
+        # 用的是本来就有的缩略图，零额外开销；选 tag 这类小变化（≈0.4）远低于阈值。
+        if self.scan and self.ocr_thumb is not None and self.ocr_thumb.shape == thumb.shape \
+                and abs(self.ocr_thumb - thumb).mean() >= FAST_HIDE_T:
+            log.info("fast hide: screen changed")
+            self.scan = None
+            self.hover = None
+            self.hide_overlay()
+            self.refresh_all()
         stable = self.prev_thumb is not None and self.prev_thumb.shape == thumb.shape \
             and abs(self.prev_thumb - thumb).mean() < DIFF_T
         self.prev_thumb = thumb

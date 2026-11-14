@@ -139,6 +139,7 @@ SUB = (128, 128, 131, 255)
 BTN = (49, 49, 49, 255)
 BTN_HOVER = (0, 153, 220, 255)
 WARN = (199, 119, 0, 255)
+OP_COLOR = {6: (226, 98, 0, 255), 5: (184, 138, 0, 255)}   # 浅色卡片上可读的高星颜色
 BADGE = {6: ((255, 122, 26), (255, 255, 255)), 5: ((255, 201, 60), (58, 42, 0)),
          4: ((167, 123, 255), (255, 255, 255)), 3: ((51, 169, 230), (255, 255, 255)),
          1: ((154, 154, 154), (255, 255, 255))}
@@ -209,6 +210,12 @@ class GameCard:
         self.hover = None
         self.img = None
         self.visible = False
+        self.offset = 0          # 当前页第一个组合的序号
+        self.pages = []          # 之前各页的起点（用于“上一页”）
+        self.more = 0            # 本页之后还剩几个组合
+        self.shown = 0
+        self.combo_key = None
+        self.win.bind("<MouseWheel>", self._wheel)
         self.win.bind("<Motion>", self._motion)
         self.win.bind("<Leave>", lambda e: self._set_hover(None))
         self.win.bind("<Button-1>", self._click)
@@ -220,6 +227,9 @@ class GameCard:
     def render(self, model, p, W, H, admin_ok, busy_text=None, orient="h"):
         self.args = (model, p, int(W), int(H), admin_ok, busy_text, orient)
         self.hover = None
+        key = tuple(c["tids"] for c in (model or {}).get("combos", []))
+        if key != self.combo_key:  # 新的一组 tag：回到第一页
+            self.combo_key, self.offset, self.pages = key, 0, []
         self._paint()
 
     def place(self, x, y, W=None, H=None):
@@ -267,6 +277,26 @@ class GameCard:
             self.on_close()
         elif kind == "admin":
             self.on_admin()
+        elif kind == "next":
+            self._page(+1)
+        elif kind == "prev":
+            self._page(-1)
+
+    def _wheel(self, e):
+        self._page(+1 if e.delta < 0 else -1)
+
+    def _page(self, step):
+        if step > 0 and self.more > 0:
+            self.pages.append(self.offset)
+            self.offset = self.offset + self.shown
+        elif step < 0 and self.pages:
+            self.offset = self.pages.pop()
+        else:
+            return
+        self.hover = None
+        self._paint()
+        if self.visible:
+            self.lw.show_image(self.img, *self.pos)
 
     # ---- 绘制 ----
     def _paint(self):
@@ -308,15 +338,48 @@ class GameCard:
         return bh
 
     def _ops_line(self, d, c, x, y, maxw, p, max_lines=1):
+        """干员名流式排版：5★/6★ 上色，放不下时以「等 N 名」结尾"""
         f = font(0.21 * p)
-        names = [n for n, _ in c["ops"]]
-        lines = _wrap(d, names, " · ", f, maxw)
-        if len(lines) > max_lines:
-            lines = lines[:max_lines]
-            lines[-1] = lines[-1] + " …"
-        for i, ln in enumerate(lines):
-            d.text((x, y + i * 0.3 * p), ln, font=f, fill=SUB, anchor="la")
-        return len(lines) * 0.3 * p
+        lh = 0.3 * p
+        sep = " · "
+        ops = c["ops"]
+        more_w = text_w(d, self.tx["ops_more"].format(n=99), f) + 0.1 * p
+        cx, line = x, 0
+        for i, (name, r) in enumerate(ops):
+            piece = (sep if cx > x else "") + name
+            pw = text_w(d, piece, f)
+            last_line = line == max_lines - 1
+            reserve = more_w if (last_line and i < len(ops) - 1) else 0
+            if cx + pw + reserve > x + maxw and cx > x:
+                if last_line:
+                    d.text((cx + 0.08 * p, y + line * lh), self.tx["ops_more"].format(n=len(ops) - i),
+                           font=f, fill=SUB, anchor="la")
+                    break
+                line, cx = line + 1, x
+                piece, pw = name, text_w(d, name, f)
+            color = OP_COLOR.get(r, SUB)
+            d.text((cx, y + line * lh), piece, font=f, fill=color, anchor="la")
+            cx += pw
+        return (line + 1) * lh
+
+    def _pager(self, d, x, y, p, more, anchor_left=True):
+        """「▲」「▼ 还有 N 个」翻页按钮（三角形自己画，避免字体缺字）"""
+        f = font(0.22 * p, True)
+        h = 0.36 * p
+        cx = x
+        if self.pages:
+            t = 0.1 * p
+            d.polygon([(cx + 0.1 * p, y + h / 2 + t / 2), (cx + 0.1 * p + 2 * t, y + h / 2 + t / 2),
+                       (cx + 0.1 * p + t, y + h / 2 - t)], fill=SUB)
+            self.hits.append(((cx, y, cx + 0.45 * p, y + h), "prev", None))
+            cx += 0.55 * p
+        if more:
+            t = 0.1 * p
+            d.polygon([(cx + 0.1 * p, y + h / 2 - t / 2), (cx + 0.1 * p + 2 * t, y + h / 2 - t / 2),
+                       (cx + 0.1 * p + t, y + h / 2 + t)], fill=BTN_HOVER)
+            label = self.tx["more_combos"].format(n=more)
+            d.text((cx + 0.4 * p, y + h / 2), label, font=f, fill=BTN_HOVER, anchor="lm")
+            self.hits.append(((cx, y, cx + 0.5 * p + text_w(d, label, f), y + h), "next", None))
 
     def _paint_h(self, img, d, model, p, W, H, admin_ok, busy):
         x0, y0, x1, y1 = 0.55 * p, 0.16 * p, W - 0.55 * p, H - 0.16 * p
@@ -343,16 +406,22 @@ class GameCard:
         f = font(0.28 * p, True)
         show_ops = H > 1.55 * p
         by = (cy - 0.62 * p / 2 - (0.12 * p if show_ops else 0))
-        for i, c in enumerate(combos):
+        page = combos[self.offset:]
+        pager_w = 2.0 * p
+        self.shown = 0
+        for i, c in enumerate(page):
             label = " + ".join(c["tags"]) + ("  ·  3:50" if c["min"] == 1 else "")
             bw = 0.56 * p + 0.18 * p + text_w(d, label, f) + 0.3 * p
-            if bx + bw + (0.8 * p if i < len(combos) - 1 else 0) > x1 - 0.2 * p and i:
-                d.text((bx, cy), f"+{len(combos) - i}", font=font(0.3 * p, True, latin=True), fill=SUB, anchor="lm")
+            if bx + bw + (pager_w if i < len(page) - 1 else 0) > x1 - 0.2 * p and i:
                 break
             self._button(img, d, c, bx, by, bw, [label], p, f, 0.36 * p)
             if show_ops:
                 self._ops_line(d, c, bx + 2, by + 0.68 * p, bw, p)
             bx += bw + 0.2 * p
+            self.shown += 1
+        self.more = len(page) - self.shown
+        if self.more or self.pages:
+            self._pager(d, bx, cy - 0.18 * p, p, self.more)
 
     def _paint_v(self, img, d, model, p, W, H, admin_ok, busy):
         x0, y0, x1, y1 = 0.16 * p, 0.42 * p, W - 0.16 * p, H - 0.16 * p
@@ -387,17 +456,23 @@ class GameCard:
         bw = x1 - lx - 0.28 * p
         f = font(0.27 * p, True)
         line_h = 0.34 * p
-        for i, c in enumerate(combos):
+        page = combos[self.offset:]
+        pager_h = 0.5 * p
+        self.shown = 0
+        for i, c in enumerate(page):
             tags = list(c["tags"]) + (["3:50"] if c["min"] == 1 else [])
             lines = _wrap(d, tags, " + ", f, bw - 0.56 * p - 0.3 * p)
-            need = max(0.62 * p, len(lines) * line_h + 0.24 * p) + 0.36 * p
-            if y + need > bottom and i:
-                d.text((lx, y + 0.1 * p), f"+{len(combos) - i}", font=font(0.3 * p, True, latin=True), fill=SUB,
-                       anchor="la")
+            need = max(0.62 * p, len(lines) * line_h + 0.24 * p) + 0.66 * p
+            reserve = pager_h if i < len(page) - 1 or self.pages else 0
+            if y + need + reserve > bottom and i:
                 break
             bh = self._button(img, d, c, lx, y, bw, lines, p, f, line_h)
             y += bh + 0.06 * p
-            y += self._ops_line(d, c, lx + 2, y, bw, p, max_lines=1) + 0.16 * p
+            y += self._ops_line(d, c, lx + 2, y, bw, p, max_lines=2) + 0.16 * p
+            self.shown += 1
+        self.more = len(page) - self.shown
+        if self.more or self.pages:
+            self._pager(d, lx, bottom - 0.4 * p, p, self.more)
 
 
 # ------------------------------------------------------------------ 括号标记

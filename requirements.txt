@@ -1,0 +1,6 @@
+rapidocr_onnxruntime
+mss
+keyboard
+numpy
+pillow
+pystray

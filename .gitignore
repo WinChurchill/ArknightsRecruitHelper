@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# 本机状态 / local state
+config.json
+data/meta.json
+assets/
+
+# 编辑器 / editors
+.vscode/
+.idea/

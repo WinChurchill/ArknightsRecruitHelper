@@ -1,0 +1,1566 @@
+{
+ "tags": {
+  "1": "Guard",
+  "2": "Sniper",
+  "3": "Defender",
+  "4": "Medic",
+  "5": "Supporter",
+  "6": "Caster",
+  "7": "Specialist",
+  "8": "Vanguard",
+  "9": "Melee",
+  "10": "Ranged",
+  "11": "Top Operator",
+  "12": "Crowd-Control",
+  "13": "Nuker",
+  "14": "Senior Operator",
+  "15": "Healing",
+  "16": "Support",
+  "17": "Starter",
+  "18": "DP-Recovery",
+  "19": "DPS",
+  "20": "Survival",
+  "21": "AoE",
+  "22": "Defense",
+  "23": "Slow",
+  "24": "Debuff",
+  "25": "Fast-Redeploy",
+  "26": "Shift",
+  "27": "Summon",
+  "28": "Robot",
+  "29": "Elemental"
+ },
+ "ops": [
+  {
+   "name": "Lancet-2",
+   "rarity": 1,
+   "tags": [
+    4,
+    10,
+    15,
+    28
+   ]
+  },
+  {
+   "name": "Castle-3",
+   "rarity": 1,
+   "tags": [
+    1,
+    9,
+    16,
+    28
+   ]
+  },
+  {
+   "name": "THRM-EX",
+   "rarity": 1,
+   "tags": [
+    7,
+    9,
+    13,
+    28
+   ]
+  },
+  {
+   "name": "Justice Knight",
+   "rarity": 1,
+   "tags": [
+    2,
+    10,
+    16,
+    28
+   ]
+  },
+  {
+   "name": "Friston-3",
+   "rarity": 1,
+   "tags": [
+    3,
+    9,
+    22,
+    28
+   ]
+  },
+  {
+   "name": "PhonoR-0",
+   "rarity": 1,
+   "tags": [
+    5,
+    10,
+    28,
+    29
+   ]
+  },
+  {
+   "name": "CONFESS-47",
+   "rarity": 1,
+   "tags": [
+    8,
+    9,
+    12,
+    28
+   ]
+  },
+  {
+   "name": "Yato",
+   "rarity": 2,
+   "tags": [
+    8,
+    9,
+    17
+   ]
+  },
+  {
+   "name": "Noir Corne",
+   "rarity": 2,
+   "tags": [
+    3,
+    9,
+    17
+   ]
+  },
+  {
+   "name": "Rangers",
+   "rarity": 2,
+   "tags": [
+    2,
+    10,
+    17
+   ]
+  },
+  {
+   "name": "Durin",
+   "rarity": 2,
+   "tags": [
+    6,
+    10,
+    17
+   ]
+  },
+  {
+   "name": "12F",
+   "rarity": 2,
+   "tags": [
+    6,
+    10,
+    17
+   ]
+  },
+  {
+   "name": "Adnachiel",
+   "rarity": 3,
+   "tags": [
+    2,
+    10,
+    19
+   ]
+  },
+  {
+   "name": "Fang",
+   "rarity": 3,
+   "tags": [
+    8,
+    9,
+    18
+   ]
+  },
+  {
+   "name": "Vanilla",
+   "rarity": 3,
+   "tags": [
+    8,
+    9,
+    18
+   ]
+  },
+  {
+   "name": "Plume",
+   "rarity": 3,
+   "tags": [
+    8,
+    9,
+    18,
+    19
+   ]
+  },
+  {
+   "name": "Melantha",
+   "rarity": 3,
+   "tags": [
+    1,
+    9,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Beagle",
+   "rarity": 3,
+   "tags": [
+    3,
+    9,
+    22
+   ]
+  },
+  {
+   "name": "Kroos",
+   "rarity": 3,
+   "tags": [
+    2,
+    10,
+    19
+   ]
+  },
+  {
+   "name": "Lava",
+   "rarity": 3,
+   "tags": [
+    6,
+    10,
+    21
+   ]
+  },
+  {
+   "name": "Hibiscus",
+   "rarity": 3,
+   "tags": [
+    4,
+    10,
+    15
+   ]
+  },
+  {
+   "name": "Ansel",
+   "rarity": 3,
+   "tags": [
+    4,
+    10,
+    15
+   ]
+  },
+  {
+   "name": "Steward",
+   "rarity": 3,
+   "tags": [
+    6,
+    10,
+    19
+   ]
+  },
+  {
+   "name": "Orchid",
+   "rarity": 3,
+   "tags": [
+    5,
+    10,
+    23
+   ]
+  },
+  {
+   "name": "Catapult",
+   "rarity": 3,
+   "tags": [
+    2,
+    10,
+    21
+   ]
+  },
+  {
+   "name": "Midnight",
+   "rarity": 3,
+   "tags": [
+    1,
+    9,
+    19
+   ]
+  },
+  {
+   "name": "Popukar",
+   "rarity": 3,
+   "tags": [
+    1,
+    9,
+    20,
+    21
+   ]
+  },
+  {
+   "name": "Spot",
+   "rarity": 3,
+   "tags": [
+    3,
+    9,
+    15,
+    22
+   ]
+  },
+  {
+   "name": "Estelle",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    20,
+    21
+   ]
+  },
+  {
+   "name": "Purestream",
+   "rarity": 4,
+   "tags": [
+    4,
+    10,
+    15,
+    16
+   ]
+  },
+  {
+   "name": "Haze",
+   "rarity": 4,
+   "tags": [
+    6,
+    10,
+    19,
+    24
+   ]
+  },
+  {
+   "name": "Gitano",
+   "rarity": 4,
+   "tags": [
+    6,
+    10,
+    21
+   ]
+  },
+  {
+   "name": "Jessica",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Meteor",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    19,
+    24
+   ]
+  },
+  {
+   "name": "Shirayuki",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    21,
+    23
+   ]
+  },
+  {
+   "name": "Scavenger",
+   "rarity": 4,
+   "tags": [
+    8,
+    9,
+    18,
+    19
+   ]
+  },
+  {
+   "name": "Vigna",
+   "rarity": 4,
+   "tags": [
+    8,
+    9,
+    18,
+    19
+   ]
+  },
+  {
+   "name": "Dobermann",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    16,
+    19
+   ]
+  },
+  {
+   "name": "Matoimaru",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Frostleaf",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Mousse",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    19
+   ]
+  },
+  {
+   "name": "Gravel",
+   "rarity": 4,
+   "tags": [
+    7,
+    9,
+    22,
+    25
+   ]
+  },
+  {
+   "name": "Rope",
+   "rarity": 4,
+   "tags": [
+    7,
+    9,
+    26
+   ]
+  },
+  {
+   "name": "Myrrh",
+   "rarity": 4,
+   "tags": [
+    4,
+    10,
+    15
+   ]
+  },
+  {
+   "name": "Perfumer",
+   "rarity": 4,
+   "tags": [
+    4,
+    10,
+    15
+   ]
+  },
+  {
+   "name": "Matterhorn",
+   "rarity": 4,
+   "tags": [
+    3,
+    9,
+    22
+   ]
+  },
+  {
+   "name": "Cuora",
+   "rarity": 4,
+   "tags": [
+    3,
+    9,
+    22
+   ]
+  },
+  {
+   "name": "Gummy",
+   "rarity": 4,
+   "tags": [
+    3,
+    9,
+    15,
+    22
+   ]
+  },
+  {
+   "name": "Earthspirit",
+   "rarity": 4,
+   "tags": [
+    5,
+    10,
+    23
+   ]
+  },
+  {
+   "name": "Shaw",
+   "rarity": 4,
+   "tags": [
+    7,
+    9,
+    26
+   ]
+  },
+  {
+   "name": "Beehunter",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    19
+   ]
+  },
+  {
+   "name": "Greyy",
+   "rarity": 4,
+   "tags": [
+    6,
+    10,
+    21,
+    23
+   ]
+  },
+  {
+   "name": "Sussurro",
+   "rarity": 4,
+   "tags": [
+    4,
+    10,
+    15
+   ]
+  },
+  {
+   "name": "Myrtle",
+   "rarity": 4,
+   "tags": [
+    8,
+    9,
+    15,
+    18
+   ]
+  },
+  {
+   "name": "Vermeil",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    19
+   ]
+  },
+  {
+   "name": "May",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Ambriel",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Utage",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Cutter",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    13,
+    19
+   ]
+  },
+  {
+   "name": "Podenco",
+   "rarity": 4,
+   "tags": [
+    5,
+    10,
+    15,
+    23
+   ]
+  },
+  {
+   "name": "Click",
+   "rarity": 4,
+   "tags": [
+    6,
+    10,
+    12,
+    19
+   ]
+  },
+  {
+   "name": "Jaye",
+   "rarity": 4,
+   "tags": [
+    7,
+    9,
+    19,
+    25
+   ]
+  },
+  {
+   "name": "Aciddrop",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    19
+   ]
+  },
+  {
+   "name": "Arene",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    19
+   ]
+  },
+  {
+   "name": "Bubble",
+   "rarity": 4,
+   "tags": [
+    3,
+    9,
+    22
+   ]
+  },
+  {
+   "name": "Jackie",
+   "rarity": 4,
+   "tags": [
+    1,
+    9,
+    19
+   ]
+  },
+  {
+   "name": "Pinecone",
+   "rarity": 4,
+   "tags": [
+    2,
+    10,
+    19,
+    21
+   ]
+  },
+  {
+   "name": "Beanstalk",
+   "rarity": 4,
+   "tags": [
+    8,
+    10,
+    18,
+    27
+   ]
+  },
+  {
+   "name": "Indra",
+   "rarity": 5,
+   "tags": [
+    1,
+    9,
+    14,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Vulcan",
+   "rarity": 5,
+   "tags": [
+    3,
+    9,
+    14,
+    19,
+    20,
+    22
+   ]
+  },
+  {
+   "name": "Ptilopsis",
+   "rarity": 5,
+   "tags": [
+    4,
+    10,
+    14,
+    15,
+    16
+   ]
+  },
+  {
+   "name": "Zima",
+   "rarity": 5,
+   "tags": [
+    8,
+    9,
+    14,
+    16,
+    18
+   ]
+  },
+  {
+   "name": "Texas",
+   "rarity": 5,
+   "tags": [
+    8,
+    9,
+    12,
+    14,
+    18
+   ]
+  },
+  {
+   "name": "Specter",
+   "rarity": 5,
+   "tags": [
+    1,
+    9,
+    14,
+    20,
+    21
+   ]
+  },
+  {
+   "name": "Blue Poison",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Platinum",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Meteorite",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    21,
+    24
+   ]
+  },
+  {
+   "name": "Mayer",
+   "rarity": 5,
+   "tags": [
+    5,
+    10,
+    12,
+    14,
+    27
+   ]
+  },
+  {
+   "name": "Silence",
+   "rarity": 5,
+   "tags": [
+    4,
+    10,
+    14,
+    15
+   ]
+  },
+  {
+   "name": "Warfarin",
+   "rarity": 5,
+   "tags": [
+    4,
+    10,
+    14,
+    15,
+    16
+   ]
+  },
+  {
+   "name": "Nearl",
+   "rarity": 5,
+   "tags": [
+    3,
+    9,
+    14,
+    15,
+    22
+   ]
+  },
+  {
+   "name": "Projekt Red",
+   "rarity": 5,
+   "tags": [
+    7,
+    9,
+    12,
+    14,
+    25
+   ]
+  },
+  {
+   "name": "Liskarm",
+   "rarity": 5,
+   "tags": [
+    3,
+    9,
+    14,
+    19,
+    22
+   ]
+  },
+  {
+   "name": "Croissant",
+   "rarity": 5,
+   "tags": [
+    3,
+    9,
+    14,
+    22,
+    26
+   ]
+  },
+  {
+   "name": "Provence",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Firewatch",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    13,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Cliffheart",
+   "rarity": 5,
+   "tags": [
+    7,
+    9,
+    14,
+    19,
+    26
+   ]
+  },
+  {
+   "name": "Pramanix",
+   "rarity": 5,
+   "tags": [
+    5,
+    10,
+    14,
+    24
+   ]
+  },
+  {
+   "name": "Istina",
+   "rarity": 5,
+   "tags": [
+    5,
+    10,
+    14,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Manticore",
+   "rarity": 5,
+   "tags": [
+    7,
+    9,
+    14,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "FEater",
+   "rarity": 5,
+   "tags": [
+    7,
+    9,
+    14,
+    23,
+    26
+   ]
+  },
+  {
+   "name": "Nightmare",
+   "rarity": 5,
+   "tags": [
+    6,
+    10,
+    14,
+    15,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Swire",
+   "rarity": 5,
+   "tags": [
+    1,
+    9,
+    14,
+    16,
+    19
+   ]
+  },
+  {
+   "name": "Glaucus",
+   "rarity": 5,
+   "tags": [
+    5,
+    10,
+    12,
+    14,
+    23
+   ]
+  },
+  {
+   "name": "Astesia",
+   "rarity": 5,
+   "tags": [
+    1,
+    9,
+    14,
+    19,
+    22
+   ]
+  },
+  {
+   "name": "Executor",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    21
+   ]
+  },
+  {
+   "name": "Waai Fu",
+   "rarity": 5,
+   "tags": [
+    7,
+    9,
+    14,
+    24,
+    25
+   ]
+  },
+  {
+   "name": "GreyThroat",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Reed",
+   "rarity": 5,
+   "tags": [
+    8,
+    9,
+    14,
+    18,
+    19
+   ]
+  },
+  {
+   "name": "Broca",
+   "rarity": 5,
+   "tags": [
+    1,
+    9,
+    14,
+    20,
+    21
+   ]
+  },
+  {
+   "name": "Hung",
+   "rarity": 5,
+   "tags": [
+    3,
+    9,
+    14,
+    15,
+    22
+   ]
+  },
+  {
+   "name": "Leizi",
+   "rarity": 5,
+   "tags": [
+    6,
+    10,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Sesa",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    21,
+    24
+   ]
+  },
+  {
+   "name": "Shamare",
+   "rarity": 5,
+   "tags": [
+    5,
+    10,
+    14,
+    24
+   ]
+  },
+  {
+   "name": "Elysium",
+   "rarity": 5,
+   "tags": [
+    8,
+    9,
+    14,
+    16,
+    18
+   ]
+  },
+  {
+   "name": "Asbestos",
+   "rarity": 5,
+   "tags": [
+    3,
+    9,
+    14,
+    19,
+    22
+   ]
+  },
+  {
+   "name": "Tsukinogi",
+   "rarity": 5,
+   "tags": [
+    5,
+    10,
+    14,
+    16,
+    20
+   ]
+  },
+  {
+   "name": "Leonhardt",
+   "rarity": 5,
+   "tags": [
+    6,
+    10,
+    13,
+    14,
+    21
+   ]
+  },
+  {
+   "name": "Ayerscarpe",
+   "rarity": 5,
+   "tags": [
+    1,
+    9,
+    14,
+    19,
+    21
+   ]
+  },
+  {
+   "name": "Andreana",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Chiave",
+   "rarity": 5,
+   "tags": [
+    8,
+    9,
+    14,
+    18,
+    19
+   ]
+  },
+  {
+   "name": "Beeswax",
+   "rarity": 5,
+   "tags": [
+    6,
+    10,
+    14,
+    21,
+    22
+   ]
+  },
+  {
+   "name": "Flint",
+   "rarity": 5,
+   "tags": [
+    1,
+    9,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "April",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Aosta",
+   "rarity": 5,
+   "tags": [
+    2,
+    10,
+    14,
+    21
+   ]
+  },
+  {
+   "name": "Whisperain",
+   "rarity": 5,
+   "tags": [
+    4,
+    10,
+    14,
+    15
+   ]
+  },
+  {
+   "name": "Kafka",
+   "rarity": 5,
+   "tags": [
+    7,
+    9,
+    12,
+    14,
+    25
+   ]
+  },
+  {
+   "name": "Iris",
+   "rarity": 5,
+   "tags": [
+    6,
+    10,
+    14,
+    19
+   ]
+  },
+  {
+   "name": "Mr. Nothing",
+   "rarity": 5,
+   "tags": [
+    7,
+    9,
+    14,
+    19,
+    25
+   ]
+  },
+  {
+   "name": "Exusiai",
+   "rarity": 6,
+   "tags": [
+    2,
+    10,
+    11,
+    19
+   ]
+  },
+  {
+   "name": "Siege",
+   "rarity": 6,
+   "tags": [
+    8,
+    9,
+    11,
+    18,
+    19
+   ]
+  },
+  {
+   "name": "Ifrit",
+   "rarity": 6,
+   "tags": [
+    6,
+    10,
+    11,
+    21,
+    24
+   ]
+  },
+  {
+   "name": "Shining",
+   "rarity": 6,
+   "tags": [
+    4,
+    10,
+    11,
+    15,
+    16
+   ]
+  },
+  {
+   "name": "Nightingale",
+   "rarity": 6,
+   "tags": [
+    4,
+    10,
+    11,
+    15,
+    16
+   ]
+  },
+  {
+   "name": "Hoshiguma",
+   "rarity": 6,
+   "tags": [
+    3,
+    9,
+    11,
+    19,
+    22
+   ]
+  },
+  {
+   "name": "Saria",
+   "rarity": 6,
+   "tags": [
+    3,
+    9,
+    11,
+    15,
+    16,
+    22
+   ]
+  },
+  {
+   "name": "SilverAsh",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    16,
+    19
+   ]
+  },
+  {
+   "name": "Skadi",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Ch'en",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    13,
+    19
+   ]
+  },
+  {
+   "name": "Schwarz",
+   "rarity": 6,
+   "tags": [
+    2,
+    10,
+    11,
+    19
+   ]
+  },
+  {
+   "name": "Hellagur",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Magallan",
+   "rarity": 6,
+   "tags": [
+    5,
+    10,
+    11,
+    16,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Mostima",
+   "rarity": 6,
+   "tags": [
+    6,
+    10,
+    11,
+    12,
+    16,
+    21
+   ]
+  },
+  {
+   "name": "Blaze",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Aak",
+   "rarity": 6,
+   "tags": [
+    7,
+    10,
+    11,
+    16,
+    19
+   ]
+  },
+  {
+   "name": "Ceobe",
+   "rarity": 6,
+   "tags": [
+    6,
+    10,
+    11,
+    12,
+    19
+   ]
+  },
+  {
+   "name": "Bagpipe",
+   "rarity": 6,
+   "tags": [
+    8,
+    9,
+    11,
+    18,
+    19
+   ]
+  },
+  {
+   "name": "Phantom",
+   "rarity": 6,
+   "tags": [
+    7,
+    9,
+    11,
+    12,
+    19,
+    25
+   ]
+  },
+  {
+   "name": "Weedy",
+   "rarity": 6,
+   "tags": [
+    7,
+    9,
+    11,
+    12,
+    19,
+    26
+   ]
+  },
+  {
+   "name": "Rosa",
+   "rarity": 6,
+   "tags": [
+    2,
+    10,
+    11,
+    12,
+    19
+   ]
+  },
+  {
+   "name": "Suzuran",
+   "rarity": 6,
+   "tags": [
+    5,
+    10,
+    11,
+    16,
+    19,
+    23
+   ]
+  },
+  {
+   "name": "Thorns",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    19,
+    22
+   ]
+  },
+  {
+   "name": "Eunectes",
+   "rarity": 6,
+   "tags": [
+    3,
+    9,
+    11,
+    19,
+    20,
+    22
+   ]
+  },
+  {
+   "name": "Surtr",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    19
+   ]
+  },
+  {
+   "name": "Blemishine",
+   "rarity": 6,
+   "tags": [
+    3,
+    9,
+    11,
+    15,
+    19,
+    22
+   ]
+  },
+  {
+   "name": "Mudrock",
+   "rarity": 6,
+   "tags": [
+    3,
+    9,
+    11,
+    19,
+    20,
+    22
+   ]
+  },
+  {
+   "name": "Mountain",
+   "rarity": 6,
+   "tags": [
+    1,
+    9,
+    11,
+    19,
+    20
+   ]
+  },
+  {
+   "name": "Archetto",
+   "rarity": 6,
+   "tags": [
+    2,
+    10,
+    11,
+    19
+   ]
+  },
+  {
+   "name": "Saga",
+   "rarity": 6,
+   "tags": [
+    8,
+    9,
+    11,
+    18,
+    19
+   ]
+  }
+ ]
+}

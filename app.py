@@ -39,7 +39,7 @@ ASSETS = os.path.join(HERE, "assets")
 SCRIPTS_DIR = os.path.join(w.INSTALL_DIR, "assets") if w.FROZEN else ASSETS
 PAUSED_FLAG = os.path.join(HERE, "paused.flag")  # “完全退出”标记：看门狗不再拉起，直到下次登录
 LOG_PATH = os.path.join(HERE, "log.txt")
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 PORT = 47391
 HOTKEY_SCAN, HOTKEY_OVERLAY = "f8", "f9"
 TICK_MS = 400
@@ -272,6 +272,20 @@ def remove_startup():
     for p in _lnk_names():
         if os.path.exists(p):
             os.remove(p)
+
+
+LICENSES_URL = "https://github.com/WinChurchill/ArknightsRecruitHelper/blob/main/THIRD_PARTY_NOTICES.md"
+
+
+def open_licenses():
+    """打开第三方许可证全文（exe 内置；源码运行时用 build 目录里的，或打开网页版）"""
+    for p in (os.path.join(rc.BUNDLE_DIR, "THIRD_PARTY_LICENSES.txt"),
+              os.path.join(os.path.dirname(os.path.abspath(__file__)), "build", "THIRD_PARTY_LICENSES.txt")):
+        if os.path.isfile(p):
+            os.startfile(p)
+            return
+    import webbrowser
+    webbrowser.open(LICENSES_URL)
 
 
 def stop_running_instance():
@@ -1206,6 +1220,8 @@ class App:
         row.pack(fill="x", pady=(4, 0))
         tk.Button(row, text=self.t("data_update"), command=lambda: self.update_data(force=True), bg=CHIP, fg=TXT,
                   relief="flat", font=(CN, px(10)), padx=10).pack(side="left")
+        tk.Button(row, text=self.t("licenses"), command=open_licenses, bg=ROW, fg=SUB, relief="flat",
+                  font=(CN, px(10)), padx=10).pack(side="left", padx=(6, 0))
         tk.Button(row, text=self.t("u_btn") if w.FROZEN else self.t("s_remove"), command=self.remove_all, bg=ROW, fg=SUB, relief="flat",
                   font=(CN, px(10)), padx=10).pack(side="right")
 
@@ -1491,6 +1507,11 @@ def selftest(out: str | None) -> int:
         extra = {s: rc.Pool(s) for s in ("jp", "kr")}
         lines.append("jp/kr pools " + " ".join(f"{k}={len(v.ops)}" for k, v in extra.items()))
         lines.append("i18n " + " ".join(f"{k}={len(v)}" for k, v in TEXT.items()))
+        if w.FROZEN:
+            lic = os.path.join(rc.BUNDLE_DIR, "THIRD_PARTY_LICENSES.txt")
+            lines.append(f"licenses bundled={os.path.isfile(lic)} size={os.path.getsize(lic) if os.path.isfile(lic) else 0}")
+            if not os.path.isfile(lic):
+                raise RuntimeError("THIRD_PARTY_LICENSES.txt missing from the packaged exe")
         lines.append("pools " + " ".join(f"{k}={len(v.ops)}" for k, v in pools.items()))
         im = Image.new("RGB", (900, 300), (40, 40, 45))
         d = ImageDraw.Draw(im)

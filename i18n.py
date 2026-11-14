@@ -8,6 +8,7 @@ EXTRA = {
         "dl_model": "正在下载{lang}识别模型（约 {mb}MB，仅一次）…",
         "dl_done": "{lang}识别模型已就绪", "dl_fail": "{lang}识别模型下载失败：{e}",
         "lang_ja": "日语", "lang_ko": "韩语",
+        "licenses": "第三方许可",
     },
     "en": {
         "srv_jp": "JP", "srv_kr": "KR",
@@ -15,6 +16,7 @@ EXTRA = {
         "dl_model": "Downloading {lang} text model (~{mb} MB, one time)…",
         "dl_done": "{lang} text model ready", "dl_fail": "{lang} text model download failed: {e}",
         "lang_ja": "Japanese", "lang_ko": "Korean",
+        "licenses": "Third-party licenses",
     },
 }
 
@@ -74,6 +76,7 @@ JA = {
     "dl_model": "{lang}の文字認識モデルをダウンロード中（約 {mb}MB、初回のみ）…",
     "dl_done": "{lang}の文字認識モデルの準備ができました", "dl_fail": "{lang}の文字認識モデルのダウンロードに失敗：{e}",
     "lang_ja": "日本語", "lang_ko": "韓国語",
+        "licenses": "サードパーティのライセンス",
 }
 
 KO = {
@@ -132,6 +135,7 @@ KO = {
     "dl_model": "{lang} 문자 인식 모델 다운로드 중 (약 {mb}MB, 한 번만)…",
     "dl_done": "{lang} 문자 인식 모델 준비 완료", "dl_fail": "{lang} 문자 인식 모델 다운로드 실패: {e}",
     "lang_ja": "일본어", "lang_ko": "한국어",
+        "licenses": "타사 라이선스",
 }
 
 

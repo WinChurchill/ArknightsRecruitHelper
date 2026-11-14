@@ -126,6 +126,12 @@ This is an unofficial, fan-made tool and is not affiliated with Hypergryph or Yo
 Arknights and related names, images and game data belong to their respective owners.
 The auto-select feature only clicks tags and the timer for you; use it at your own discretion.
 
+## 致谢 / Credits
+
+- 干员与 tag 数据 / Game data: [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData) · [ArknightsGameData_YoStar](https://github.com/Kengxxiao/ArknightsGameData_YoStar)
+- 文字识别 / OCR: [RapidOCR](https://github.com/RapidAI/RapidOCR) · [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) models · [ONNX Runtime](https://onnxruntime.ai) · [OpenCV](https://opencv.org)
+- 以及 / plus Pillow, NumPy, mss, keyboard, pystray 等 — 完整列表与许可证见 / full list & licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
 ## License
 
-[MIT](LICENSE) © 2026 WinChurchill
+[MIT](LICENSE) © 2026 WinChurchill. Third-party components keep their own licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

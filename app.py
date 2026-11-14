@@ -287,6 +287,8 @@ class App:
         self.ocr_thumb = None
         self.busy = False
         self.applying = False
+        self.miss_streak = 0
+        self.next_ocr_at = 0.0
         self.hover = None
         self.panel_closed_sig = None
         self.model = None
@@ -496,9 +498,13 @@ class App:
         self.prev_thumb = thumb
         if not stable:
             return  # 画面在变（动画/切换中）：等它稳定
-        if self.ocr_thumb is not None and self.ocr_thumb.shape == thumb.shape \
-                and abs(self.ocr_thumb - thumb).mean() < DIFF_T:
+        change = abs(self.ocr_thumb - thumb).mean() \
+            if self.ocr_thumb is not None and self.ocr_thumb.shape == thumb.shape else 999
+        if change < DIFF_T:
             return  # 和上次识别时一样：不用再 OCR
+        # 退避：非公招画面上的小变化（倒计时、粒子）不要反复 OCR；切换界面这种大变化立即识别
+        if change < 4 and time.time() < self.next_ocr_at:
+            return
         self.ocr_thumb = thumb
         self.run_ocr(img, list(area))
 
@@ -531,6 +537,11 @@ class App:
         self.run_ocr(img, [origin[0], origin[1], img.shape[1], img.shape[0]])
 
     def on_scan(self, s: Scan, area, dt):
+        if not s.ok:
+            self.miss_streak += 1
+            self.next_ocr_at = time.time() + min(5.0, 0.5 * 2 ** self.miss_streak)
+        else:
+            self.miss_streak, self.next_ocr_at = 0, 0.0
         if not s.ok:
             if self.scan:
                 self.scan = None

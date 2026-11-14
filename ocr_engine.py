@@ -58,7 +58,8 @@ class Scan:
 class OCR:
     def __init__(self):
         from rapidocr_onnxruntime import RapidOCR
-        self.engine = RapidOCR()
+        # 4 线程：速度和用满全部核心一样，CPU 占用减半
+        self.engine = RapidOCR(intra_op_num_threads=4, inter_op_num_threads=1)
 
     def read_boxes(self, img, scale=1):
         import cv2

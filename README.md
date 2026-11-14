@@ -86,3 +86,20 @@ python app.py --selftest # 自检：数据 + OCR
 
 运行方式：exe 版装在 `%ProgramFiles%\ArknightsRecruitHelper`（计划任务只执行这里的文件），设置、数据和日志 `log.txt` 在 `%APPDATA%\ArknightsRecruitHelper`。
 助手只在游戏是当前窗口、且画面变化后才做 OCR；数据来自 [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData)。
+
+---
+
+## 声明 / Disclaimer
+
+本项目是玩家自制的非官方工具，与上海鹰角网络、悠星（Yostar）等官方无任何关联。
+「明日方舟」及相关名称、图片、游戏数据的版权归其各自所有者。
+干员与 tag 数据来自公开的 [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData) 解包数据。
+自动选择功能只代替你点击 tag 和时间，请自行判断是否符合游戏的用户协议，使用风险自负。
+
+This is an unofficial, fan-made tool and is not affiliated with Hypergryph or Yostar.
+Arknights and related names, images and game data belong to their respective owners.
+The auto-select feature only clicks tags and the timer for you; use it at your own discretion.
+
+## License
+
+[MIT](LICENSE) © 2026 WinChurchill

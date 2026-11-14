@@ -13,6 +13,8 @@ import os
 import socket
 import subprocess
 import sys
+import logging
+import re
 import threading
 import time
 import tkinter as tk
@@ -24,17 +26,23 @@ w.set_dpi_aware()  # 必须在 Tk 之前
 
 import recruit_core as rc  # noqa: E402
 from ocr_engine import OCR, Scan  # noqa: E402
+from gamecard import BracketLayer, GameCard  # noqa: E402
 from overlay import (ACCENT, BG, CHIP, CN, EN, LINE, PANEL, ROW, STAR, SUB, TXT, WARN,  # noqa: E402
-                     GameCard, Marks, Panel, ResultView, px)
+                     Panel, ResultView, px)
 
 HERE = rc.USER_DIR  # 用户数据目录（exe 版在 %APPDATA%）
 os.makedirs(HERE, exist_ok=True)
 CONFIG_PATH = os.path.join(HERE, "config.json")
 ASSETS = os.path.join(HERE, "assets")
-VERSION = "1.0.0"
+# 计划任务以管理员执行的脚本/图标：exe 版放在 Program Files（只有管理员能改）
+SCRIPTS_DIR = os.path.join(w.INSTALL_DIR, "assets") if w.FROZEN else ASSETS
+PAUSED_FLAG = os.path.join(HERE, "paused.flag")  # “完全退出”标记：看门狗不再拉起，直到下次登录
+LOG_PATH = os.path.join(HERE, "log.txt")
+VERSION = "1.0.1"
 PORT = 47391
 HOTKEY_SCAN, HOTKEY_OVERLAY = "f8", "f9"
 TICK_MS = 400
+log = logging.getLogger("ark")
 DIFF_T = 0.3  # 缩略图变化阈值
 
 TEXT = {
@@ -44,6 +52,7 @@ TEXT = {
         "need_admin": "⚠ 游戏以管理员运行，自动点选需要本工具也以管理员运行 —— 点此重启",
         "applying": "正在为你选择 tag …", "applied": "已选择：{tags}  ·  {time}",
         "apply_fail": "自动选择未完全成功，请检查游戏内的 tag 和时间",
+        "apply_stopped": "已停止自动选择：你移动了鼠标或切换了窗口（安全保护）",
         "v_six": "高级资深干员", "v_six_s": "选「高级资深干员」，9 小时必出六星",
         "v_five": "保底五星", "v_five_s": "{tags}",
         "v_four": "保底四星", "v_four_s": "{tags}",
@@ -75,7 +84,8 @@ TEXT = {
         "update_fail": "更新失败：{e}",
         "applied_startup": "启动方式已保存", "startup_fail": "设置启动方式失败（需要管理员权限）",
         # tray
-        "t_show": "打开主窗口", "t_overlay": "叠加层", "t_quit": "退出",
+        "t_show": "打开主窗口", "t_overlay": "叠加层", "t_quit": "完全退出（下次开机再启动）",
+        "t_sleep": "关闭（下次打开游戏时自动出现）",
         # wizard
         "w_title": "欢迎使用 公招助手", "w_sub": "进到公开招募界面，助手会直接在游戏画面上标出该选的 tag。",
         "w_shortcut": "在桌面创建「公招助手」快捷方式", "w_go": "开始使用",
@@ -94,6 +104,7 @@ TEXT = {
         "need_admin": "⚠ The game runs as admin; auto-select needs this tool elevated too — click to restart",
         "applying": "Selecting tags…", "applied": "Selected: {tags}  ·  {time}",
         "apply_fail": "Auto-select didn't fully succeed — please check the tags and timer in game",
+        "apply_stopped": "Auto-select stopped: you moved the mouse or switched windows (safety)",
         "v_six": "Top Operator", "v_six_s": "Pick Top Operator, 9h → guaranteed 6★",
         "v_five": "Guaranteed 5★", "v_five_s": "{tags}",
         "v_four": "Guaranteed 4★", "v_four_s": "{tags}",
@@ -123,7 +134,8 @@ TEXT = {
         "updating": "Updating data…", "updated": "Data updated", "uptodate": "Data is up to date",
         "update_fail": "Update failed: {e}",
         "applied_startup": "Startup mode saved", "startup_fail": "Failed to set startup mode (admin needed)",
-        "t_show": "Open window", "t_overlay": "Overlay", "t_quit": "Quit",
+        "t_show": "Open window", "t_overlay": "Overlay", "t_quit": "Quit completely (until next sign-in)",
+        "t_sleep": "Close (comes back next time the game opens)",
         "w_title": "Welcome to Recruit Helper", "w_sub": "Open the Recruit screen and the helper marks the tags to pick right on the game.",
         "w_shortcut": "Create a desktop shortcut", "w_go": "Get started",
         "w_admin": "You'll be asked for admin once (for autostart and auto-select); never again after.",
@@ -157,12 +169,12 @@ def save_config(cfg: dict):
 # ====================================================================== startup / install helpers
 def ensure_assets():
     """生成图标和隐藏启动脚本"""
-    os.makedirs(ASSETS, exist_ok=True)
-    ico = os.path.join(ASSETS, "icon.ico")
+    os.makedirs(SCRIPTS_DIR, exist_ok=True)
+    ico = os.path.join(SCRIPTS_DIR, "icon.ico")
     if not os.path.exists(ico):
         make_icon(256).save(ico, sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
-    vbs = os.path.join(ASSETS, "launch.vbs")
-    with open(vbs, "w", encoding="utf-16") as f:
+    vbs = os.path.join(SCRIPTS_DIR, "launch.vbs")
+    with open(vbs, "w", encoding="utf-16", newline="") as f:
         f.write('CreateObject("WScript.Shell").Run "schtasks /run /tn ' + w.TASK_PREFIX
                 + '" & WScript.Arguments(0), 0, False\r\n')
     return ico, vbs
@@ -189,14 +201,19 @@ def _lnk_names():
 def apply_startup(mode: str, shortcut: bool, cfg: dict, exe: str | None = None) -> bool:
     """创建/删除计划任务与快捷方式。需要管理员。exe=安装后的程序路径（exe 版）"""
     ico, vbs = ensure_assets()
-    ok = w.create_task("Open", "", logon=False, exe=exe)
+    ok = w.create_task("Open", "", exe=exe)
     if mode == "logon":
-        ok &= w.create_task("Logon", "--background", logon=True, exe=exe)
+        # 登录时启动后台待命；另有看门狗每 3 分钟检查一次，进程不在就拉起（完全退出后不拉起）
+        ok &= w.create_task("Logon", "--background --logon", trigger="logon", exe=exe)
+        if w.FROZEN:
+            ok &= w.create_task("Watch", "", trigger="watch", exe=exe,
+                                command=("wscript.exe", f'//B //Nologo "{write_watchdog(exe or sys.executable)}"'))
     else:
         w.delete_task("Logon")
+        w.delete_task("Watch")
     desk_lnk, game_lnk, menu_lnk = _lnk_names()
     if mode == "with_game":
-        ok &= w.create_task("Game", "--with-game", logon=False, exe=exe)
+        ok &= w.create_task("Game", "--with-game", exe=exe)
         icon = ico
         appdata_icon = os.path.join(os.environ.get("APPDATA", ""), "Hypergryph")
         if os.path.isdir(appdata_icon):
@@ -218,8 +235,27 @@ def apply_startup(mode: str, shortcut: bool, cfg: dict, exe: str | None = None) 
     return ok
 
 
+def write_watchdog(exe: str) -> str:
+    """看门狗脚本：助手没在运行、且用户没有“完全退出”时，以后台模式启动它"""
+    os.makedirs(SCRIPTS_DIR, exist_ok=True)
+    path = os.path.join(SCRIPTS_DIR, "watchdog.vbs")
+    name = os.path.basename(exe)
+    vbs = [
+        'Set fso = CreateObject("Scripting.FileSystemObject")',
+        f'If fso.FileExists("{PAUSED_FLAG}") Then WScript.Quit',
+        f'If Not fso.FileExists("{exe}") Then WScript.Quit',
+        'Set wmi = GetObject("winmgmts:")',
+        f'Set ps = wmi.ExecQuery("select ProcessId from Win32_Process where Name=\'{name}\'")',
+        'If ps.Count > 0 Then WScript.Quit',
+        f'CreateObject("WScript.Shell").Run """{exe}"" --background", 0, False',
+    ]
+    with open(path, "w", encoding="utf-16", newline="") as f:
+        f.write("\r\n".join(vbs) + "\r\n")
+    return path
+
+
 def remove_startup():
-    for n in ("Open", "Logon", "Game"):
+    for n in ("Open", "Logon", "Game", "Watch"):
         w.delete_task(n)
     for p in _lnk_names():
         if os.path.exists(p):
@@ -252,14 +288,41 @@ def install_self() -> str | None:
             break
         except PermissionError:
             time.sleep(1)
+    # v1.0.0 装在用户目录（普通程序可改）：迁移后删除旧副本
+    for old in w.safe_app_dirs([w.LEGACY_INSTALL_DIR]):
+        if os.path.normcase(old) != os.path.normcase(w.INSTALL_DIR):
+            shutil.rmtree(old, ignore_errors=True)
     return w.INSTALLED_EXE
+
+
+ARGS_RE = re.compile(r"^--[A-Za-z0-9_-]+(=[A-Za-z0-9_.-]+)?(\s+--[A-Za-z0-9_-]+(=[A-Za-z0-9_.-]+)?)*$")
+
+
+def launch_game(cfg: dict):
+    """以管理员身份启动启动器前做安全检查：必须是官方厂商有效签名的 exe，参数只能是简单的 --开关"""
+    exe = cfg.get("launcher") or (w.find_launcher() or (None,))[0]
+    args = cfg.get("launcher_args") or "--game=arknights"
+    if not ARGS_RE.match(args):
+        log.warning("launcher args rejected: %r", args)
+        args = "--game=arknights"
+    ok, who = w.verify_signed(exe or "")
+    if not ok:
+        log.warning("refused to start launcher %r: %s", exe, who)
+        return None
+    try:
+        return subprocess.Popen([exe] + args.split(), cwd=os.path.dirname(exe))
+    except OSError as e:
+        log.warning("launcher start failed: %s", e)
+        return None
 
 
 def uninstall_everything():
     """移除计划任务、快捷方式，并在退出后删除程序和数据"""
     remove_startup()
     if w.FROZEN:
-        dirs = [w.INSTALL_DIR, rc.USER_DIR]
+        dirs = w.safe_app_dirs([w.INSTALL_DIR, rc.USER_DIR, w.LEGACY_INSTALL_DIR])
+        if not dirs:
+            return
         cmd = "ping 127.0.0.1 -n 4 >nul & " + " & ".join(f'rmdir /s /q "{d}"' for d in dirs)
         subprocess.Popen(["cmd", "/c", cmd], creationflags=w.CREATE_NO_WINDOW, cwd=os.environ.get("TEMP", "C:\\"))
 
@@ -289,6 +352,8 @@ class App:
         self.applying = False
         self.miss_streak = 0
         self.next_ocr_at = 0.0
+        self.sleeping = False      # 用户关闭：休眠到下一次游戏启动
+        self.sleep_hwnd = None
         self.hover = None
         self.panel_closed_sig = None
         self.model = None
@@ -302,7 +367,7 @@ class App:
 
         self.load_pools()
         self._build_main()
-        self.marks = Marks(root)
+        self.marks = BracketLayer(root)
         self.panel = Panel(root, self.tx, self.apply_combo, self.on_hover, self.close_panel,
                            self.restart_admin, self.on_panel_moved)
         self.card = GameCard(root, self.tx, self.apply_combo, self.on_hover, self.close_panel, self.restart_admin)
@@ -390,24 +455,14 @@ class App:
 
     # ------------------------------------------------------------ game lifecycle
     def start_launcher(self):
-        exe = self.cfg.get("launcher")
-        if not exe:
-            found = w.find_launcher()
-            if found:
-                exe = found[0]
-                self.setcfg(launcher=exe, launcher_args=found[1])
-        if not exe or not os.path.exists(exe):
-            return
         if w.find_game_hwnd():
             return
-        args = self.cfg.get("launcher_args", "--game=arknights").split()
-        try:
-            self.launcher_proc = subprocess.Popen([exe] + args, cwd=os.path.dirname(exe))
-        except OSError:
-            self.launcher_proc = None
+        self.launcher_proc = launch_game(self.cfg)
 
     def on_game_start(self):
         self.game_seen = True
+        r = w.client_rect(self.hwnd)
+        log.info("game started: %s %s", w.process_name(self.hwnd) or "?", r[2:] if r else "?")
         self.game_elevated = bool(w.process_is_elevated(self.hwnd))
         self.load_ocr()
         self._update_on_game_start()
@@ -421,8 +476,9 @@ class App:
         self.hide_overlay()
         self.ocr = None  # 释放 OCR 模型内存
         self.refresh_all()
+        log.info("game closed")
         if self.mode == "with_game" or (self.mode == "background" and self.cfg.get("on_exit", "stay") == "quit"):
-            self.quit()
+            self.quit("game closed")
 
     def load_ocr(self):
         if self.ocr or self.ocr_loading:
@@ -460,9 +516,17 @@ class App:
                 elif self.mode == "with_game" and now - self.started > 30:
                     if self.launcher_proc is None or self.launcher_proc.poll() is not None:
                         if now - self.started > 900 or self.launcher_proc is not None:
-                            self.quit()
+                            self.quit("launcher closed without game")
                 if not self.cfg.get("region"):
                     return
+        if self.sleeping:
+            if self.hwnd and self.hwnd == self.sleep_hwnd:
+                return                      # 还是关闭时那一局游戏：继续休眠
+            if not self.hwnd:
+                self.sleep_hwnd = None      # 游戏关了：下次再打开就唤醒
+                return
+            self.sleeping = False           # 新的一局游戏：唤醒
+            log.info("wake: new game window")
         if self.hwnd and not self.game_seen:
             self.on_game_start()
 
@@ -616,13 +680,13 @@ class App:
             return
         busy = self.t("applying") if self.applying else None
         card_rect = self._card_rect(s, ox, oy) if self.cfg.get("panel_style", "card") == "card" else None
-        if card_rect:  # 嵌入游戏：贴在公招对话框下方
-            x, y, cw, ch = card_rect
-            sig = ("card", id(model), int(cw), int(ch), self.applying, self.admin_ok(), self.lang)
+        if card_rect:  # 嵌入游戏：对话框下方（横）或侧边（竖）
+            orient, x, y, cw, ch = card_rect
+            sig = ("card", orient, id(model), int(cw), int(ch), self.applying, self.admin_ok(), self.lang)
             if rerender or sig != getattr(self, "_panel_sig", None):
                 self._panel_sig = sig
                 self.card.set_texts(self.tx)
-                self.card.render(model, s.pitch, cw, ch, self.admin_ok(), busy)
+                self.card.render(model, s.pitch, cw, ch, self.admin_ok(), busy, orient)
             self.card.place(x, y, cw, ch)
             self.card.show(True)
             self.panel.show(False)
@@ -645,18 +709,25 @@ class App:
             self.panel.show(True)
 
     def _card_rect(self, s: Scan, ox, oy):
-        """对话框正下方、游戏窗口内的空间；放不下返回 None（改用侧边面板）"""
+        """在游戏窗口内找卡片位置：对话框下方够高 → 横排；否则左右两侧够宽 → 竖排；都不行 → None（侧边面板）"""
         d = s.dialog()
         if not d or not self.area:
             return None
         p = s.pitch
-        x0, x1 = d[0] + ox, d[2] + ox
-        y0 = d[3] + oy + 0.12 * p
-        bottom = self.area[1] + self.area[3] - 0.06 * p
-        h = min(1.85 * p, bottom - y0)
-        if h < 1.2 * p:
-            return None
-        return x0, y0, x1 - x0, h
+        dl, dt, dr, db = d[0] + ox, d[1] + oy, d[2] + ox, d[3] + oy
+        gx0, gy0 = self.area[0], self.area[1]
+        gx1, gy1 = gx0 + self.area[2], gy0 + self.area[3]
+        below = gy1 - db
+        if below >= 1.45 * p:
+            y0 = db + 0.12 * p
+            return "h", dl, y0, dr - dl, min(1.85 * p, gy1 - 0.06 * p - y0)
+        right, left = gx1 - dr, dl - gx0
+        for space, side in sorted([(right, "r"), (left, "l")], reverse=True):
+            if space >= 2.8 * p:
+                cw = min(space - 0.25 * p, 4.4 * p)
+                x = dr + 0.12 * p if side == "r" else dl - 0.12 * p - cw
+                return "v", x, dt, cw, db - dt
+        return None
 
     def _place_panel(self, s: Scan, ox, oy):
         W, H = self.panel.size()
@@ -715,7 +786,7 @@ class App:
 
     def restart_admin(self):
         if w.relaunch_as_admin(["--background"] if self.mode != "normal" else []):
-            self.quit()
+            self.quit("restart as admin")
 
     def apply_combo(self, combo):
         s = self.scan
@@ -752,6 +823,8 @@ class App:
         def done_ok(sc: Scan):
             return sc.ok and sc.selected == target and (sc.time is None or sc.time == ttime)
 
+        stopped = {}
+
         def work():
             ok = False
             try:
@@ -759,7 +832,7 @@ class App:
                 for _ in range(2):
                     pts = clicks_for(sc)
                     if pts:
-                        w.click_sequence(self.hwnd, pts)
+                        w.click_sequence(self.hwnd, pts, bounds=area)
                     time.sleep(0.45)
                     img, _ = w.grab(area)
                     sc = self.ocr.scan(img, {s.srv: self.pools[s.srv]})
@@ -767,14 +840,19 @@ class App:
                         ok = True
                         break
                 self.root.after(0, lambda: self.on_scan(sc, area, 0))
+            except w.ClickAborted as e:
+                log.info("auto-select stopped: %s", e)
+                stopped["why"] = str(e)
             except Exception as e:  # noqa: BLE001
+                log.exception("apply failed")
                 self.status(f"apply: {e}")
             finally:
                 def fin():
                     self.applying = False
                     self.prev_thumb = self.ocr_thumb = None
                     tm = f"{ttime[0]:02d}:{ttime[1]:02d}"
-                    self.status(self.t("applied", tags=" + ".join(combo["tags"]), time=tm) if ok
+                    self.status(self.t("apply_stopped") if stopped.get("why") else
+                                self.t("applied", tags=" + ".join(combo["tags"]), time=tm) if ok
                                 else self.t("apply_fail"))
                     self.update_overlay(rerender=True)
                 self.root.after(0, fin)
@@ -916,16 +994,37 @@ class App:
             self.update_overlay(rerender=True)
 
     def show_main(self):
+        if self.sleeping:
+            log.info("wake: window opened")
+        self.sleeping = False
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
 
     def on_main_close(self):
         self.setcfg(geometry=self.root.geometry())
-        if self.tray and (self.mode != "normal" or self.cfg.get("startup") == "logon"):
-            self.root.withdraw()  # 后台模式：关窗口=缩到托盘
+        if self.cfg.get("startup", "manual") == "manual" and self.mode == "normal":
+            self.quit("window closed (manual mode)")
         else:
-            self.quit()
+            self.go_sleep()  # 关窗口 = 休眠，下次打开游戏自动出现
+
+    def go_sleep(self):
+        log.info("sleep until next game launch")
+        self.sleeping = True
+        self.sleep_hwnd = self.hwnd
+        self.root.withdraw()
+        self.hide_overlay()
+        self.scan = None
+        self.ocr = None  # 释放 OCR，醒来时再加载
+        self.game_seen = False
+
+    def full_quit(self):
+        """完全退出：看门狗不再拉起，直到下次登录 Windows 或手动打开"""
+        try:
+            open(PAUSED_FLAG, "w").close()
+        except OSError:
+            pass
+        self.quit("full quit from tray")
 
     # ------------------------------------------------------------ settings
     def open_settings(self):
@@ -1069,7 +1168,7 @@ class App:
             from tkinter import messagebox
             if messagebox.askyesno(self.t("u_btn"), self.t("u_confirm"), parent=self.settings_win or self.root):
                 uninstall_everything()
-                self.quit()
+                self.quit("uninstall")
             return
         self.setcfg(startup="manual", shortcut=False)
         if w.is_admin():
@@ -1139,7 +1238,9 @@ class App:
             pystray.MenuItem(self.t("t_overlay"), lambda: a(0, self.toggle_overlay),
                              checked=lambda _: self.cfg.get("overlay", True)),
             pystray.MenuItem(self.t("settings"), lambda: a(0, lambda: (self.show_main(), self.open_settings()))),
-            pystray.MenuItem(self.t("t_quit"), lambda: a(0, self.quit)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(self.t("t_sleep"), lambda: a(0, self.go_sleep)),
+            pystray.MenuItem(self.t("t_quit"), lambda: a(0, self.full_quit)),
         )
         self.tray = pystray.Icon("ArkRecruit", make_icon(64), self.t("app"), menu)
         self.tray.run_detached()
@@ -1158,12 +1259,13 @@ class App:
                     if msg == b"show":
                         self.root.after(0, self.show_main)
                     elif msg == b"quit":
-                        self.root.after(0, self.quit)
+                        self.root.after(0, lambda: self.quit("replaced by update"))
                 except OSError:
                     return
         threading.Thread(target=serve, daemon=True).start()
 
-    def quit(self):
+    def quit(self, reason="quit"):
+        log.info("exit: %s", reason)
         try:
             self.setcfg(geometry=self.root.geometry())
         except tk.TclError:
@@ -1294,6 +1396,18 @@ def run_wizard(root: tk.Tk, cfg: dict, installer: bool) -> bool:
 
 
 # ====================================================================== main
+def setup_logging():
+    """小日志文件（最多 2×256KB），记录启动/退出/游戏开关和所有异常，方便排查"""
+    import logging.handlers
+    h = logging.handlers.RotatingFileHandler(LOG_PATH, maxBytes=256 * 1024, backupCount=1, encoding="utf-8")
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%m-%d %H:%M:%S"))
+    log.addHandler(h)
+    log.setLevel(logging.INFO)
+    sys.excepthook = lambda t, v, tb: log.error("uncaught", exc_info=(t, v, tb))
+    threading.excepthook = lambda a: log.error("thread error", exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
+    tk.Tk.report_callback_exception = lambda self, t, v, tb: log.error("tk callback error", exc_info=(t, v, tb))
+
+
 def selftest(out: str | None) -> int:
     lines = [f"version {VERSION} frozen={w.FROZEN}", f"user_dir {rc.USER_DIR}"]
     try:
@@ -1352,6 +1466,12 @@ def main():
         return
 
     mode = "with_game" if "--with-game" in args else "background" if "--background" in args else "normal"
+    setup_logging()
+    if mode == "normal" or "--logon" in args:  # 用户主动打开 / 新登录：取消“完全退出”标记
+        try:
+            os.remove(PAUSED_FLAG)
+        except OSError:
+            pass
 
     # 单实例：已有实例在运行 → 让它显示主窗口
     sock = socket.socket()
@@ -1360,10 +1480,8 @@ def main():
         sock.listen(4)
     except OSError:
         if mode == "with_game":  # 已在后台待命：只需启动游戏
-            launcher = cfg.get("launcher")
-            if launcher and os.path.exists(launcher) and not w.find_game_hwnd():
-                subprocess.Popen([launcher] + cfg.get("launcher_args", "--game=arknights").split(),
-                                 cwd=os.path.dirname(launcher))
+            if not w.find_game_hwnd():
+                launch_game(cfg)
         try:
             c = socket.create_connection(("127.0.0.1", PORT), timeout=2)
             c.sendall(b"show" if mode == "normal" else b"noop")
@@ -1379,6 +1497,7 @@ def main():
             root.destroy()
             return
     App._sock = sock
+    log.info("start v%s mode=%s admin=%s frozen=%s", VERSION, mode, w.is_admin(), w.FROZEN)
     app = App(root, mode)
     if mode == "normal":
         root.deiconify()

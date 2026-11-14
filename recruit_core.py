@@ -99,8 +99,29 @@ def build_pool(gacha: dict, chars: dict) -> dict:
         for t in c.get("tagList") or []:
             if t in name2tid:
                 tid.add(name2tid[t])
-        ops.append({"name": name, "rarity": stars, "tags": sorted(tid)})
-    return {"tags": {str(k): v for k, v in tags.items()}, "ops": ops}
+        ops.append({"name": _clean(name), "rarity": stars, "tags": sorted(tid)})
+    pool = {"tags": {str(k): _clean(v) for k, v in tags.items()}, "ops": ops}
+    validate_pool(pool)
+    return pool
+
+
+MAX_DOWNLOAD = 64 * 1024 * 1024  # 单个数据文件上限（实际约 15MB）
+
+
+def _clean(s) -> str:
+    """去掉控制字符，限制长度（数据只用于显示，防止异常/恶意内容）"""
+    return re.sub(r"[\x00-\x1f\x7f]", "", str(s)).strip()[:40]
+
+
+def validate_pool(pool: dict) -> None:
+    """镜像站是第三方：下载的数据必须“看起来像”公招数据，否则不覆盖本地数据"""
+    tags, ops = pool.get("tags", {}), pool.get("ops", [])
+    if not (20 <= len(tags) <= 80):
+        raise ValueError(f"unexpected tag count {len(tags)}")
+    if not (50 <= len(ops) <= 1500):
+        raise ValueError(f"unexpected operator count {len(ops)}")
+    if sum(1 for o in ops if o["rarity"] == 6) < 5 or not any(o["rarity"] == 1 for o in ops):
+        raise ValueError("rarity distribution looks wrong")
 
 
 def _fetch_json(url: str) -> dict:
@@ -109,7 +130,13 @@ def _fetch_json(url: str) -> dict:
         try:
             req = urllib.request.Request(m + url, headers={"User-Agent": "ak-recruit-tool"})
             with urllib.request.urlopen(req, timeout=60) as r:
-                return json.loads(r.read().decode("utf-8"))
+                raw = r.read(MAX_DOWNLOAD + 1)
+            if len(raw) > MAX_DOWNLOAD:
+                raise ValueError("response too large")
+            data = json.loads(raw.decode("utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("unexpected JSON")
+            return data
         except Exception as e:  # noqa: BLE001
             err = e
     raise RuntimeError(f"下载失败 / download failed: {url}: {err}")
